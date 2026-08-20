@@ -106,6 +106,33 @@ with st.sidebar:
                 except Exception as e:
                     st.error(f"Could not parse this file: {e}")
 
+    with st.expander("Fetch a filter from FPbase"):
+        st.markdown(
+            "FPbase aggregates real commercial filter spectra (Chroma, Omega, Thorlabs, and others) "
+            "contributed via public microscope configs - no file download needed for anything already "
+            "in there. Coverage varies a lot by manufacturer (Edmund Optics has essentially none)."
+        )
+        fp_filter_query = st.text_input(
+            "Filter name or part number", key="fp_filter_query", placeholder="e.g. Chroma ET525/50m"
+        )
+        fp_filter_category = st.selectbox(
+            "Category",
+            ["excitation", "emission", "dichroic"],
+            key="fp_filter_category",
+            help="Only used if FPbase's own data doesn't already mark this as a dichroic/beamsplitter - "
+            "a filter's excitation/emission role depends on how it's placed in a microscope, not the "
+            "filter itself, so FPbase can't always infer it.",
+        )
+        if st.button("Search & fetch", key="fp_filter_fetch"):
+            if not fp_filter_query.strip():
+                st.error("Enter a filter name or part number.")
+            else:
+                try:
+                    result = fpbase_client.fetch_filter(fp_filter_query, category=fp_filter_category)
+                    st.success(f"Registered {result.display_name} (subtype {result.subtype}). Reselect it above.")
+                except Exception as e:
+                    st.error(str(e))
+
     st.header("Excitation source")
     source_type = st.radio("Type", ["LED", "Laser"], horizontal=True)
     if source_type == "LED":
@@ -134,17 +161,17 @@ if selected_fluor is None:
 ex_filter_spec = None
 if selected_ex_filter is not None:
     series = selected_ex_filter.load()
-    ex_filter_spec = series.get("%T") or next(iter(series.values()))
+    ex_filter_spec = catalog.pick_primary_series(series, "excitation")
 
 em_filter_spec = None
 if selected_em_filter is not None:
     series = selected_em_filter.load()
-    em_filter_spec = series.get("%T") or next(iter(series.values()))
+    em_filter_spec = catalog.pick_primary_series(series, "emission")
 
 dichroic_spec = None
 if selected_dichroic is not None:
     series = selected_dichroic.load()
-    dichroic_spec = series.get("%T") or next(iter(series.values()))
+    dichroic_spec = catalog.pick_primary_series(series, "dichroic")
 
 fig = plotting.build_figure(
     fluorophore_excitation=selected_fluor.excitation,

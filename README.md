@@ -9,8 +9,10 @@ a given fluorophore, by modeling spectral overlap through the optical path.
   proteins + common dyes) and, on request, from
   [fluorophores.tugraz.at](https://fluorophores.tugraz.at) (organic dyes) - one dye at a time, never
   a bulk crawl (see [Data sources](#data-sources) below).
-- Imports filter/dichroic transmission curves from data files you download from manufacturer product
-  pages (Thorlabs, Edmund Optics, Semrock, Chroma, ...) - see [`data/filters/README.md`](data/filters/README.md).
+- Pulls filter/dichroic transmission curves from FPbase's aggregated filter catalog (real Chroma/
+  Omega/Thorlabs parts, no download needed) where available, and otherwise imports them from data
+  files you download from a manufacturer's product page - see
+  [`data/filters/README.md`](data/filters/README.md).
 - Models an LED or laser source from just a center wavelength and FWHM/linewidth.
 - Plots everything overlaid and normalized, and computes relative excitation/emission efficiency
   scores plus bleed-through warnings for the combination you've picked.
@@ -40,8 +42,12 @@ sidebar's "Import a filter data file" tool.
   import. Their substance detail pages have been returning HTTP 500 site-wide since at least
   2026-08-20 (a bug on their end); the fetcher surfaces that clearly and lets you supply a spectrum
   CSV id manually as a fallback if you have one.
-- **Filters/dichroics**: no manufacturer offers a bulk API, so these are downloaded one product page
-  at a time by you and imported via the app - see `data/filters/README.md`.
+- **Filters/dichroics**: no manufacturer offers a bulk API, but FPbase also aggregates real
+  commercial filter spectra (contributed via public microscope configs) - `fpbase_client.fetch_filter()`
+  looks one up by (fuzzy) name and registers it directly, no file needed, for whatever FPbase happens
+  to have (coverage is manufacturer-dependent: strong for Chroma/Omega, weak for Thorlabs, essentially
+  none for Edmund Optics). Anything FPbase doesn't have is downloaded one product page at a time by
+  you and imported via the app - see `data/filters/README.md`.
 - **Camera Bayer-mask QE curves**: not yet modeled - there's no standard bulk source for these either;
   a later addition once real sensor datasheet curves are available to plug in.
 

@@ -47,6 +47,28 @@ class FilterEntry:
         return parsed.series
 
 
+# Which parsed series key to prefer for each filter category, in priority
+# order. "excitation"/"emission"/"dichroic" are the semantic labels
+# filter_import.py assigns when a file's own header text names them (e.g.
+# Thorlabs' bundled filter-set downloads); "%T" is the generic fallback label
+# used for simple single-curve files.
+_SERIES_PRIORITY: dict[str, list[str]] = {
+    "excitation": ["excitation", "%T"],
+    "emission": ["emission", "%T"],
+    "dichroic": ["dichroic", "%T"],
+}
+
+
+def pick_primary_series(series: dict[str, Spectrum], category: str) -> Spectrum:
+    """Pick the Spectrum to use for `category` out of a parsed file's series
+    dict, preferring a category-matched label and falling back to the
+    generic "%T" curve, then whatever's first if neither is present."""
+    for key in _SERIES_PRIORITY.get(category, ["%T"]):
+        if key in series:
+            return series[key]
+    return next(iter(series.values()))
+
+
 def safe_filename_part(text: str) -> str:
     """Sanitize a manufacturer/part-number string for use in a filename.
 
@@ -106,18 +128,24 @@ def register_filter(
     filename: str,
 ) -> None:
     """Append a new filter to catalog.yaml. Assumes the data file itself has
-    already been saved to data/filters/<filename>."""
+    already been saved to data/filters/<filename>. Re-registering the same
+    filename+category (e.g. re-fetching a part you already have) updates the
+    existing row in place rather than adding a duplicate."""
     rows = []
     if FILTER_CATALOG_PATH.exists():
         rows = yaml.safe_load(FILTER_CATALOG_PATH.read_text()) or []
-    rows.append(
-        {
-            "display_name": display_name,
-            "manufacturer": manufacturer,
-            "part_number": part_number,
-            "category": category,
-            "filename": filename,
-        }
-    )
+    new_row = {
+        "display_name": display_name,
+        "manufacturer": manufacturer,
+        "part_number": part_number,
+        "category": category,
+        "filename": filename,
+    }
+    for i, r in enumerate(rows):
+        if r.get("filename") == filename and r.get("category") == category:
+            rows[i] = new_row
+            break
+    else:
+        rows.append(new_row)
     FILTER_DIR.mkdir(parents=True, exist_ok=True)
-    FILTER_CATALOG_PATH.write_text(yaml.safe_dump(rows, sort_keys=False))
+    FILTER_CATALOG_PATH.write_text(yaml.safe_dump(rows, sort_keys=False, allow_unicode=True))

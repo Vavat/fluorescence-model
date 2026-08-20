@@ -1,8 +1,32 @@
 # Adding filter/dichroic data
 
+## Option 1: check FPbase first
+
+Before downloading anything, try the **"Fetch a filter from FPbase"** expander in the app's sidebar.
+FPbase aggregates real commercial filter spectra contributed via public microscope configs - as of
+2026-08 that's ~1100 Chroma parts, ~1300 Omega parts, and a couple dozen Thorlabs parts, all with
+clean spectral data and no file download needed. Coverage is very manufacturer-dependent (Edmund
+Optics has essentially none there), so this is a lookup against whatever FPbase happens to have, not
+a guarantee - if it's not there, fall back to Option 2.
+
+Search is fuzzy (ignores case/punctuation, so "ET525/50m" finds "Chroma ET525/50m"). A filter's
+excitation/emission/dichroic role usually has to be picked manually in the Category dropdown - FPbase
+only auto-detects dichroics, and only when a part is tagged as a beamsplitter (subtype "BS"); many
+real dichroics are tagged "LP" (longpass) instead and still need the category set by hand.
+
+## Option 2: manual download
+
 There's no bulk API for filter manufacturers (Thorlabs, Edmund Optics, Semrock, Chroma, ...) -
-each part's spectral data is a one-off download from its own product page. Add filters here as you
-need them, for parts you actually own or are considering.
+each part's spectral data is a one-off download from its own product page. Some manufacturers don't
+publish raw data at all (Edmund Optics, as of 2026-08, per their own confirmation) - in that case,
+check FPbase (above), or ask the manufacturer directly. Add filters here as you need them, for parts
+you actually own or are considering.
+
+Other places worth checking, roughly in order of fit for fluorescence work specifically: Chroma's
+[Spectra Viewer](https://www.chroma.com/spectra-viewer) (CSV/ASCII/XLSX export per their own release
+notes), Semrock's [SearchLight](https://searchlight.idex-hs.com/) (txt/CSV export), and Omega's
+[Curvomatic](https://www.omegafilters.com/curvomatic) (ASCII export) - none of these were verified by
+actually driving the live tool (they're JS-rendered), so double check when you're there.
 
 ## Step by step
 

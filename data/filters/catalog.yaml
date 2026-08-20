@@ -1,1 +1,180 @@
-[]
+- display_name: Thorlabs MDF05-BFP - Excitation Filter (12.5 mm Fluorescence Filter
+    Set for BFP)
+  manufacturer: Thorlabs
+  part_number: MDF05-BFP
+  category: excitation
+  filename: thorlabs_MDF05-BFP.csv
+- display_name: Thorlabs MDF05-BFP - Emission Filter (12.5 mm Fluorescence Filter
+    Set for BFP)
+  manufacturer: Thorlabs
+  part_number: MDF05-BFP
+  category: emission
+  filename: thorlabs_MDF05-BFP.csv
+- display_name: Thorlabs MDF05-BFP - Dichroic (12.5 mm Fluorescence Filter Set for
+    BFP)
+  manufacturer: Thorlabs
+  part_number: MDF05-BFP
+  category: dichroic
+  filename: thorlabs_MDF05-BFP.csv
+- display_name: Thorlabs MDF05-CY55 - Excitation Filter (12.5 mm Fluorescence Filter
+    Set for Cy5.5)
+  manufacturer: Thorlabs
+  part_number: MDF05-CY55
+  category: excitation
+  filename: thorlabs_MDF05-CY55.csv
+- display_name: Thorlabs MDF05-CY55 - Emission Filter (12.5 mm Fluorescence Filter
+    Set for Cy5.5)
+  manufacturer: Thorlabs
+  part_number: MDF05-CY55
+  category: emission
+  filename: thorlabs_MDF05-CY55.csv
+- display_name: Thorlabs MDF05-CY55 - Dichroic (12.5 mm Fluorescence Filter Set for
+    Cy5.5)
+  manufacturer: Thorlabs
+  part_number: MDF05-CY55
+  category: dichroic
+  filename: thorlabs_MDF05-CY55.csv
+- display_name: Thorlabs MDF05-CY5 - Excitation Filter (12.5 mm Fluorescence Filter
+    Set for Cy5)
+  manufacturer: Thorlabs
+  part_number: MDF05-CY5
+  category: excitation
+  filename: thorlabs_MDF05-CY5.csv
+- display_name: Thorlabs MDF05-CY5 - Emission Filter (12.5 mm Fluorescence Filter
+    Set for Cy5)
+  manufacturer: Thorlabs
+  part_number: MDF05-CY5
+  category: emission
+  filename: thorlabs_MDF05-CY5.csv
+- display_name: Thorlabs MDF05-CY5 - Dichroic (12.5 mm Fluorescence Filter Set for
+    Cy5)
+  manufacturer: Thorlabs
+  part_number: MDF05-CY5
+  category: dichroic
+  filename: thorlabs_MDF05-CY5.csv
+- display_name: Thorlabs MDF05-CY7 - Excitation Filter (12.5 mm Fluorescence Filter
+    Set for Cy7)
+  manufacturer: Thorlabs
+  part_number: MDF05-CY7
+  category: excitation
+  filename: thorlabs_MDF05-CY7.csv
+- display_name: Thorlabs MDF05-CY7 - Emission Filter (12.5 mm Fluorescence Filter
+    Set for Cy7)
+  manufacturer: Thorlabs
+  part_number: MDF05-CY7
+  category: emission
+  filename: thorlabs_MDF05-CY7.csv
+- display_name: Thorlabs MDF05-CY7 - Dichroic (12.5 mm Fluorescence Filter Set for
+    Cy7)
+  manufacturer: Thorlabs
+  part_number: MDF05-CY7
+  category: dichroic
+  filename: thorlabs_MDF05-CY7.csv
+- display_name: Thorlabs MDF05-FITC - Excitation Filter (12.5 mm Fluorescence Filter
+    Set for FITC)
+  manufacturer: Thorlabs
+  part_number: MDF05-FITC
+  category: excitation
+  filename: thorlabs_MDF05-FITC.csv
+- display_name: Thorlabs MDF05-FITC - Emission Filter (12.5 mm Fluorescence Filter
+    Set for FITC)
+  manufacturer: Thorlabs
+  part_number: MDF05-FITC
+  category: emission
+  filename: thorlabs_MDF05-FITC.csv
+- display_name: Thorlabs MDF05-FITC - Dichroic (12.5 mm Fluorescence Filter Set for
+    FITC)
+  manufacturer: Thorlabs
+  part_number: MDF05-FITC
+  category: dichroic
+  filename: thorlabs_MDF05-FITC.csv
+- display_name: Thorlabs MDF05-GFP - Excitation Filter (12.5 mm Fluorescence Filter
+    Set for GFP)
+  manufacturer: Thorlabs
+  part_number: MDF05-GFP
+  category: excitation
+  filename: thorlabs_MDF05-GFP.csv
+- display_name: Thorlabs MDF05-GFP - Emission Filter (12.5 mm Fluorescence Filter
+    Set for GFP)
+  manufacturer: Thorlabs
+  part_number: MDF05-GFP
+  category: emission
+  filename: thorlabs_MDF05-GFP.csv
+- display_name: Thorlabs MDF05-GFP - Dichroic (12.5 mm Fluorescence Filter Set for
+    GFP)
+  manufacturer: Thorlabs
+  part_number: MDF05-GFP
+  category: dichroic
+  filename: thorlabs_MDF05-GFP.csv
+- display_name: Thorlabs MDF05-MCHC - Excitation Filter (12.5 mm Fluorescence Filter
+    Set for MCHC)
+  manufacturer: Thorlabs
+  part_number: MDF05-MCHC
+  category: excitation
+  filename: thorlabs_MDF05-MCHC.csv
+- display_name: Thorlabs MDF05-MCHC - Emission Filter (12.5 mm Fluorescence Filter
+    Set for MCHC)
+  manufacturer: Thorlabs
+  part_number: MDF05-MCHC
+  category: emission
+  filename: thorlabs_MDF05-MCHC.csv
+- display_name: Thorlabs MDF05-MCHC - Dichroic (12.5 mm Fluorescence Filter Set for
+    MCHC)
+  manufacturer: Thorlabs
+  part_number: MDF05-MCHC
+  category: dichroic
+  filename: thorlabs_MDF05-MCHC.csv
+- display_name: Thorlabs MDF05-NIR - Excitation Filter (12.5 mm Fluorescence Filter
+    Set for NIR)
+  manufacturer: Thorlabs
+  part_number: MDF05-NIR
+  category: excitation
+  filename: thorlabs_MDF05-NIR.csv
+- display_name: Thorlabs MDF05-NIR - Emission Filter (12.5 mm Fluorescence Filter
+    Set for NIR)
+  manufacturer: Thorlabs
+  part_number: MDF05-NIR
+  category: emission
+  filename: thorlabs_MDF05-NIR.csv
+- display_name: Thorlabs MDF05-NIR - Dichroic (12.5 mm Fluorescence Filter Set for
+    NIR)
+  manufacturer: Thorlabs
+  part_number: MDF05-NIR
+  category: dichroic
+  filename: thorlabs_MDF05-NIR.csv
+- display_name: Thorlabs MDF05-TOM - Excitation Filter (12.5 mm Fluorescence Filter
+    Set for TOM)
+  manufacturer: Thorlabs
+  part_number: MDF05-TOM
+  category: excitation
+  filename: thorlabs_MDF05-TOM.csv
+- display_name: Thorlabs MDF05-TOM - Emission Filter (12.5 mm Fluorescence Filter
+    Set for TOM)
+  manufacturer: Thorlabs
+  part_number: MDF05-TOM
+  category: emission
+  filename: thorlabs_MDF05-TOM.csv
+- display_name: Thorlabs MDF05-TOM - Dichroic (12.5 mm Fluorescence Filter Set for
+    TOM)
+  manufacturer: Thorlabs
+  part_number: MDF05-TOM
+  category: dichroic
+  filename: thorlabs_MDF05-TOM.csv
+- display_name: Thorlabs MDF05-TXRED - Excitation Filter (12.5 mm Fluorescence Filter
+    Set for TXRED)
+  manufacturer: Thorlabs
+  part_number: MDF05-TXRED
+  category: excitation
+  filename: thorlabs_MDF05-TXRED.csv
+- display_name: Thorlabs MDF05-TXRED - Emission Filter (12.5 mm Fluorescence Filter
+    Set for TXRED)
+  manufacturer: Thorlabs
+  part_number: MDF05-TXRED
+  category: emission
+  filename: thorlabs_MDF05-TXRED.csv
+- display_name: Thorlabs MDF05-TXRED - Dichroic (12.5 mm Fluorescence Filter Set for
+    TXRED)
+  manufacturer: Thorlabs
+  part_number: MDF05-TXRED
+  category: dichroic
+  filename: thorlabs_MDF05-TXRED.csv
