@@ -1,0 +1,10 @@
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+*.egg-info/
+streamlit_test.log
+
+# tugraz listing is a refreshable cache of their public index page, not
+# curated data - regenerate with tugraz_client._fetch_listing(force_refresh=True)
+data/tugraz_listing_cache.json
