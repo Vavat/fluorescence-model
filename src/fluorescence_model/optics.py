@@ -126,3 +126,81 @@ def evaluate_path(
         emission_crosstalk=emission_crosstalk,
         warnings=warnings,
     )
+
+
+def excitation_light_spectrum(
+    source: Spectrum,
+    excitation_filter: Optional[Spectrum] = None,
+    dichroic: Optional[Spectrum] = None,
+    grid: np.ndarray = DEFAULT_GRID_NM,
+) -> Spectrum:
+    """The light spectrum that actually reaches the specimen: source x
+    excitation filter transmission x dichroic reflectance (R = 1 - T, same
+    convention as `evaluate_path`). Deliberately NOT peak-normalized - its
+    height relative to the (normalized-for-display) source/filter curves
+    shows how much throughput the filter and dichroic actually cost you.
+
+    Matches `evaluate_path`'s excitation_efficiency metric exactly (same
+    three factors), unlike an earlier version of this function which omitted
+    the dichroic.
+    """
+    src = np.clip(source.resample(grid), 0.0, None)
+    ex_filt = _resampled(excitation_filter, grid)
+    dichroic_R = 1.0 - _resampled(dichroic, grid) if dichroic is not None else np.ones_like(grid)
+    return Spectrum(
+        wavelength_nm=grid.copy(),
+        value=src * ex_filt * dichroic_R,
+        label="Excitation light at specimen",
+        kind="source",
+        source="computed",
+    )
+
+
+def excitation_absorption_spectrum(
+    source: Spectrum,
+    fluorophore_excitation: Spectrum,
+    excitation_filter: Optional[Spectrum] = None,
+    dichroic: Optional[Spectrum] = None,
+    grid: np.ndarray = DEFAULT_GRID_NM,
+) -> Spectrum:
+    """The light that actually reaches the specimen (see
+    `excitation_light_spectrum`), further weighted by the fluorophore's own
+    excitation spectrum - i.e. which wavelengths of that light actually drive
+    excitation. This is exactly the integrand behind `evaluate_path`'s
+    excitation_efficiency metric, and is always <= excitation_light_spectrum
+    point-by-point (weighted by a 0-1 fraction, never amplified). Deliberately
+    NOT peak-normalized, same reasoning as `excitation_light_spectrum`.
+    """
+    light_at_specimen = excitation_light_spectrum(source, excitation_filter, dichroic, grid)
+    ex_fluor = np.clip(fluorophore_excitation.resample(grid), 0.0, None)
+    return Spectrum(
+        wavelength_nm=grid.copy(),
+        value=light_at_specimen.value * ex_fluor,
+        label="Excitation light absorbed by fluorophore",
+        kind="source",
+        source="computed",
+    )
+
+
+def emission_light_spectrum(
+    fluorophore_emission: Spectrum,
+    dichroic: Optional[Spectrum] = None,
+    emission_filter: Optional[Spectrum] = None,
+    grid: np.ndarray = DEFAULT_GRID_NM,
+) -> Spectrum:
+    """The light spectrum that actually reaches the camera: fluorophore
+    emission x dichroic transmission x emission filter transmission.
+    Deliberately NOT peak-normalized, for the same reason as
+    `excitation_light_spectrum` - matches the three factors in
+    `evaluate_path`'s emission_efficiency metric exactly.
+    """
+    em = np.clip(fluorophore_emission.resample(grid), 0.0, None)
+    dichroic_T = _resampled(dichroic, grid)
+    em_filt = _resampled(emission_filter, grid)
+    return Spectrum(
+        wavelength_nm=grid.copy(),
+        value=em * dichroic_T * em_filt,
+        label="Emission light at camera",
+        kind="emission",
+        source="computed",
+    )

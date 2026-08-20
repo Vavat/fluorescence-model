@@ -173,6 +173,14 @@ if selected_dichroic is not None:
     series = selected_dichroic.load()
     dichroic_spec = catalog.pick_primary_series(series, "dichroic")
 
+excitation_combined = optics.excitation_light_spectrum(source_spectrum, ex_filter_spec, dichroic_spec)
+excitation_absorbed = optics.excitation_absorption_spectrum(
+    source_spectrum, selected_fluor.excitation, ex_filter_spec, dichroic_spec
+)
+emission_combined = optics.emission_light_spectrum(selected_fluor.emission, dichroic_spec, em_filter_spec)
+
+log_y = st.radio("Y-axis scale", ["Linear", "Log"], horizontal=True) == "Log"
+
 fig = plotting.build_figure(
     fluorophore_excitation=selected_fluor.excitation,
     fluorophore_emission=selected_fluor.emission,
@@ -180,8 +188,20 @@ fig = plotting.build_figure(
     excitation_filter=ex_filter_spec,
     dichroic=dichroic_spec,
     emission_filter=em_filter_spec,
+    excitation_combined=excitation_combined,
+    excitation_absorbed=excitation_absorbed,
+    emission_combined=emission_combined,
+    log_y=log_y,
 )
 st.plotly_chart(fig, use_container_width=True)
+st.caption(
+    "Dashed = illumination side (source, excitation filter, fluorophore excitation); "
+    "solid = detection side (fluorophore emission, emission filter, dichroic). The filled curves "
+    "show light actually reaching the specimen/camera (unnormalized - their height reflects real "
+    "throughput loss, not just shape): the excitation side has a 50%-opacity curve for light "
+    "reaching the specimen and a 100%-opacity curve, drawn on top, for the subset of that light "
+    "actually absorbed by the fluorophore. Both match the efficiency metrics below exactly."
+)
 
 result = optics.evaluate_path(
     fluorophore_excitation=selected_fluor.excitation,
