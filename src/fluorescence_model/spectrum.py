@@ -75,6 +75,25 @@ class Spectrum:
             return None
         return float(self.wavelength_nm[int(np.argmax(self.value))])
 
+    def crossing_nm(self, threshold: float = 0.5) -> Optional[float]:
+        """Wavelength of the first (lowest-wavelength) crossing of
+        `threshold`, linearly interpolated between the two straddling
+        samples - e.g. a longpass dichroic's cut-on wavelength, found at its
+        50% transmission point rather than an arbitrary peak (dichroics are
+        typically a broad near-100% plateau, not a single peak, so peak_nm()
+        wouldn't reliably land on the physically meaningful edge). Returns
+        None if the curve never crosses `threshold` at all.
+        """
+        val = self.value
+        for i in range(1, val.size):
+            v0, v1 = val[i - 1], val[i]
+            if v0 == threshold:
+                return float(self.wavelength_nm[i - 1])
+            if (v0 - threshold) * (v1 - threshold) < 0:
+                t = (threshold - v0) / (v1 - v0)
+                return float(self.wavelength_nm[i - 1] + t * (self.wavelength_nm[i] - self.wavelength_nm[i - 1]))
+        return None
+
     def to_dict(self) -> dict:
         return {
             "wavelength_nm": self.wavelength_nm.tolist(),

@@ -1,33 +1,40 @@
 """Builds the overlaid Plotly figure.
 
-Raw spectra (fluorophore excitation/emission, source, filters, dichroic, and
-eventually camera QE) are drawn as plain lines, peak-normalized to a common
-0-1 scale so their shapes are directly comparable - dashed for anything on
-the excitation/illumination side (source, excitation filter, fluorophore
-excitation), solid for anything on the emission/detection side (fluorophore
-emission, emission filter, dichroic %T, camera).
+Coloring scheme (fixed, not a switch - this is the settled design):
 
-The computed combined curves are drawn as filled areas, deliberately NOT
-normalized, so their height relative to the reference lines shows real
-throughput loss:
-- excitation_light (15% fill alpha): source x excitation filter x dichroic
-  reflectance - the light that reaches the specimen.
-- excitation_absorbed (100% fill alpha): the above, further weighted by the
-  fluorophore's own excitation spectrum - the light that actually drives
-  excitation. Always <= excitation_light point-by-point, drawn on top of it.
-- emission_combined (50% fill alpha): fluorophore emission x dichroic
-  transmission x emission filter - the light that reaches the camera.
+- Fluorophore excitation, excitation filter, source: dashed lines, each
+  colored by its OWN peak wavelength (see wavelength_color.py) - a curve
+  peaking in the blue reads blue, one peaking in the red reads red.
+- Fluorophore emission, emission filter: solid lines, same peak-wavelength
+  coloring.
+- Dichroic (%T): solid line, colored by the wavelength where it crosses 50%
+  transmission (Spectrum.crossing_nm) rather than its peak - a dichroic is
+  typically a broad near-100% plateau, not a single peak, so its physically
+  meaningful characteristic wavelength is the cut-on/cut-off edge, not
+  wherever peak_nm() happens to land in that plateau (possibly on ripple).
+- The three computed "light that actually gets there" curves (excitation
+  light at specimen, excitation light absorbed by fluorophore, emission
+  light at camera) are filled areas with a horizontal color gradient
+  following the true color of light at each wavelength (Plotly
+  `fillgradient`), deliberately NOT normalized so their height shows real
+  throughput loss. The gradient's start/stop are pinned to the plot's full
+  x-axis range (not each curve's own narrower range) so a given wavelength
+  reads as the same color on every curve, not rescaled per trace.
 
-Only the FILL is scaled by that alpha (via an rgba fillcolor) - each curve's
-boundary LINE is always drawn fully opaque. This matters because
-excitation_light and excitation_absorbed share the same color: whenever a
-fluorophore's excitation efficiency is high across the source's band (the
-common, well-matched case), excitation_absorbed nearly coincides with
-excitation_light, and two same-colored fills that overlap are visually just
-"more of that color" regardless of their stated opacity - orange-over-orange
-is still orange. A crisp outline on excitation_light keeps its true extent
-traceable even when the fill underneath is fully covered by the (also
-orange) absorbed curve on top of it.
+Alpha for the three gradient-filled curves is baked directly into their
+colorscale stops (as an rgba alpha), not the trace's own `opacity`, and each
+still gets a crisp, fully-opaque neutral outline:
+- excitation light at specimen: 15% alpha (faint backdrop)
+- excitation light absorbed by fluorophore: 100% alpha, drawn on top
+- emission light at camera: 50% alpha
+
+This matters because excitation-light-at-specimen and excitation-absorbed
+are drawn with the exact same gradient - whenever a fluorophore's excitation
+efficiency is high across the source's band (the common, well-matched case),
+"absorbed" nearly coincides with "at specimen", and two overlapping fills of
+the same color are visually indistinguishable regardless of their alpha. The
+crisp outline keeps "at specimen"'s true extent traceable even where its
+fill is fully covered by "absorbed" on top of it.
 
 Every trace carries a stable `uid` and the figure sets a constant
 `uirevision`, which is the standard Plotly.js recipe for preserving
@@ -52,54 +59,29 @@ import numpy as np
 import plotly.graph_objects as go
 
 from .spectrum import DEFAULT_GRID_NM, Spectrum
+from .wavelength_color import wavelength_to_hex, wavelength_to_rgb
 
 # Floor used only for display when the log-scale toggle is on - real zeros
 # would otherwise vanish off a log axis. Never affects the underlying data
 # or any efficiency/metric calculation, just what gets plotted.
 _LOG_FLOOR = 1e-6
 
-# Fill opacity for "Excitation light at specimen" - kept low so it reads as
-# a faint backdrop behind "Excitation light absorbed by fluorophore" (drawn
-# on top at full opacity) instead of competing with it.
-_EXCITATION_AT_SPECIMEN_OPACITY = 0.15
+# Fallback color when a curve has no meaningful characteristic wavelength to
+# color by (e.g. an all-zero spectrum) - shouldn't normally happen.
+_FALLBACK_COLOR = "#333333"
+
+# Fill alpha for each of the three gradient-filled combined curves.
+_EXCITATION_AT_SPECIMEN_ALPHA = 0.15
+_EXCITATION_ABSORBED_ALPHA = 1.0
+_EMISSION_AT_CAMERA_ALPHA = 0.5
 
 # Constant uirevision so Plotly.js preserves user-driven state (legend
-# show/hide clicks, zoom/pan) across figure rebuilds, keyed per-trace by the
-# stable `uid` each trace is given below - see module docstring.
+# show/hide clicks, zoom/pan) across figure rebuilds - see module docstring.
 _UIREVISION = "fluorescence-model"
 
-_COLORS = {
-    "excitation": "#2ca02c",
-    "emission": "#d62728",
-    "source": "#ff7f0e",
-    "excitation_filter": "#1f77b4",
-    "emission_filter": "#9467bd",
-    "dichroic": "#7f7f7f",
-    "camera": "#8c564b",
-    "excitation_combined": "#ff7f0e",
-    "emission_combined": "#d62728",
-}
-
-def _rgba(hex_color: str, alpha: float) -> str:
-    h = hex_color.lstrip("#")
-    r, g, b = int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16)
-    return f"rgba({r},{g},{b},{alpha})"
-
-
-# Dashed = excitation/illumination side, solid = emission/detection side.
-_DASH = {
-    "excitation": "dash",
-    "source": "dash",
-    "excitation_filter": "dash",
-    "emission": "solid",
-    "emission_filter": "solid",
-    "dichroic": "solid",
-    "camera": "solid",
-}
-
 # Every curve build_figure can draw, by its legend name, in display order.
-# Exposed so app.py can build show/hide controls (e.g. a multiselect) without
-# duplicating this list, and pass the result back in as `hidden_names`.
+# Exposed so app.py can build show/hide controls without duplicating this
+# list, and pass the result back in as `hidden_names`.
 CURVE_NAMES = (
     "Fluorophore excitation",
     "Fluorophore emission",
@@ -111,6 +93,36 @@ CURVE_NAMES = (
     "Excitation light absorbed by fluorophore",
     "Emission light at camera",
 )
+
+# The illumination-side and detection-side curve names, for a coarse
+# excitation-only/emission-only/both display filter (app.py) - "Dichroic
+# (%T)" deliberately belongs to neither, since it's relevant to both sides
+# and stays shown regardless of which side is selected.
+EXCITATION_SIDE_CURVES = (
+    "Fluorophore excitation",
+    "Source spectrum",
+    "Excitation filter",
+    "Excitation light at specimen",
+    "Excitation light absorbed by fluorophore",
+)
+EMISSION_SIDE_CURVES = (
+    "Fluorophore emission",
+    "Emission filter",
+    "Emission light at camera",
+)
+
+
+def _wavelength_gradient_stops(wl_min: float, wl_max: float, alpha: float, n: int = 60) -> list:
+    """Colorscale stops (t in [0,1] -> rgba string) tracing the true color of
+    light from wl_min to wl_max, for use as a Plotly `fillgradient.colorscale`
+    with `start=wl_min, stop=wl_max` so t maps directly to wavelength."""
+    stops = []
+    for i in range(n):
+        t = i / (n - 1)
+        wl = wl_min + t * (wl_max - wl_min)
+        r, g, b = wavelength_to_rgb(wl)
+        stops.append([t, f"rgba({r},{g},{b},{alpha})"])
+    return stops
 
 
 def build_figure(
@@ -133,6 +145,8 @@ def build_figure(
     what actually makes this persist across reruns (see module docstring)."""
     fig = go.Figure()
     hidden_names = hidden_names or set()
+    grid_min, grid_max = float(grid.min()), float(grid.max())
+    _gradient_cache: dict = {}
 
     def _display_y(values: np.ndarray) -> np.ndarray:
         return np.clip(values, _LOG_FLOOR, None) if log_y else values
@@ -140,9 +154,21 @@ def build_figure(
     def _visibility(name: str):
         return "legendonly" if name in hidden_names else True
 
-    def add_line(spec: Optional[Spectrum], name: str, key: str):
+    def _gradient_stops(alpha: float) -> list:
+        if alpha not in _gradient_cache:
+            _gradient_cache[alpha] = _wavelength_gradient_stops(grid_min, grid_max, alpha)
+        return _gradient_cache[alpha]
+
+    def add_characteristic_colored_line(
+        spec: Optional[Spectrum], name: str, dash: str, uid: str, color_wavelength_fn=Spectrum.peak_nm
+    ):
+        """A dashed/solid line colored by one characteristic wavelength of
+        its own data - by default its peak, but e.g. the dichroic passes
+        `Spectrum.crossing_nm` instead (see module docstring)."""
         if spec is None:
             return
+        wl_for_color = color_wavelength_fn(spec)
+        color = wavelength_to_hex(wl_for_color) if wl_for_color is not None else _FALLBACK_COLOR
         norm = spec.normalize()
         fig.add_trace(
             go.Scatter(
@@ -150,63 +176,63 @@ def build_figure(
                 y=_display_y(norm.value),
                 name=name,
                 mode="lines",
-                line=dict(color=_COLORS[key], dash=_DASH[key]),
+                line=dict(color=color, dash=dash),
                 opacity=0.9,
-                uid=key,
+                uid=uid,
                 visible=_visibility(name),
             )
         )
 
-    def add_filled(spec: Optional[Spectrum], name: str, key: str, uid: str, opacity: float = 0.5):
+    def add_gradient_filled(spec: Optional[Spectrum], name: str, uid: str, dash: str, alpha: float):
         if spec is None:
             return
-        # `opacity` scales the FILL only (via an rgba fillcolor), while the
-        # boundary line stays fully opaque. Two same-colored fills that
-        # nearly coincide (e.g. "absorbed" sitting almost exactly on top of
-        # "at specimen" whenever the fluorophore's excitation efficiency is
-        # high) are visually indistinguishable as fills - orange-over-orange
-        # is just orange - but the crisp outline still traces the wider
-        # curve's true extent even where the fill underneath is covered.
         fig.add_trace(
             go.Scatter(
                 x=spec.wavelength_nm,
                 y=_display_y(spec.value),
                 name=name,
                 mode="lines",
-                line=dict(color=_COLORS[key], width=1.5),
+                line=dict(color="rgba(40,40,40,0.8)", width=1.5, dash=dash),
                 fill="tozeroy",
-                fillcolor=_rgba(_COLORS[key], opacity),
+                fillgradient=dict(
+                    type="horizontal",
+                    colorscale=_gradient_stops(alpha),
+                    start=grid_min,
+                    stop=grid_max,
+                ),
                 uid=uid,
                 visible=_visibility(name),
             )
         )
 
-    add_line(fluorophore_excitation, "Fluorophore excitation", "excitation")
-    add_line(fluorophore_emission, "Fluorophore emission", "emission")
-    add_line(source, "Source spectrum", "source")
-    add_line(excitation_filter, "Excitation filter", "excitation_filter")
-    add_line(dichroic, "Dichroic (%T)", "dichroic")
-    add_line(emission_filter, "Emission filter", "emission_filter")
-    add_filled(
+    add_characteristic_colored_line(fluorophore_excitation, "Fluorophore excitation", "dash", "excitation")
+    add_characteristic_colored_line(fluorophore_emission, "Fluorophore emission", "solid", "emission")
+    add_characteristic_colored_line(source, "Source spectrum", "dash", "source")
+    add_characteristic_colored_line(excitation_filter, "Excitation filter", "dash", "excitation_filter")
+    add_characteristic_colored_line(
+        dichroic, "Dichroic (%T)", "solid", "dichroic", color_wavelength_fn=Spectrum.crossing_nm
+    )
+    add_characteristic_colored_line(emission_filter, "Emission filter", "solid", "emission_filter")
+    add_gradient_filled(
         excitation_combined,
         "Excitation light at specimen",
-        "excitation_combined",
         uid="excitation_light_at_specimen",
-        opacity=_EXCITATION_AT_SPECIMEN_OPACITY,
+        dash="dash",
+        alpha=_EXCITATION_AT_SPECIMEN_ALPHA,
     )
-    add_filled(
+    add_gradient_filled(
         excitation_absorbed,
         "Excitation light absorbed by fluorophore",
-        "excitation_combined",
         uid="excitation_absorbed",
-        opacity=1.0,
+        dash="dash",
+        alpha=_EXCITATION_ABSORBED_ALPHA,
     )
-    add_filled(
+    add_gradient_filled(
         emission_combined,
         "Emission light at camera",
-        "emission_combined",
         uid="emission_light_at_camera",
-        opacity=0.5,
+        dash="solid",
+        alpha=_EMISSION_AT_CAMERA_ALPHA,
     )
 
     yaxis: dict = dict(title="Normalized intensity / transmission", type="log" if log_y else "linear")
@@ -216,7 +242,7 @@ def build_figure(
         yaxis["range"] = [0, 1.05]
 
     fig.update_layout(
-        xaxis=dict(title="Wavelength (nm)", range=[float(grid.min()), float(grid.max())]),
+        xaxis=dict(title="Wavelength (nm)", range=[grid_min, grid_max]),
         yaxis=yaxis,
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0),
         margin=dict(l=40, r=20, t=40, b=40),

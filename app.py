@@ -193,8 +193,26 @@ excitation_absorbed = optics.excitation_absorption_spectrum(
 )
 emission_combined = optics.emission_light_spectrum(selected_fluor.emission, dichroic_spec, em_filter_spec)
 
-log_y = st.radio("Y-axis scale", ["Linear", "Log"], horizontal=True) == "Log"
+col_scale, col_side = st.columns([1, 1])
+with col_scale:
+    log_y = st.radio("Y-axis scale", ["Linear", "Log"], horizontal=True) == "Log"
+with col_side:
+    side = st.segmented_control(
+        "Show",
+        ["Excitation only", "Both", "Emission only"],
+        default="Both",
+        required=True,
+        key="side_filter",
+        help="Dichroic (%T) stays shown in all three states - it's relevant to both sides.",
+    )
+
+side_hidden = {
+    "Excitation only": set(plotting.EMISSION_SIDE_CURVES),
+    "Emission only": set(plotting.EXCITATION_SIDE_CURVES),
+    "Both": set(),
+}[side]
 hidden_names = set(plotting.CURVE_NAMES) - set(st.session_state.get("shown_curves", plotting.CURVE_NAMES))
+hidden_names |= side_hidden
 
 fig = plotting.build_figure(
     fluorophore_excitation=selected_fluor.excitation,
@@ -212,14 +230,18 @@ fig = plotting.build_figure(
 st.plotly_chart(fig, use_container_width=True, key="spectral_overlay_chart")
 st.caption(
     "Dashed = illumination side (source, excitation filter, fluorophore excitation); "
-    "solid = detection side (fluorophore emission, emission filter, dichroic). The filled curves "
-    "show light actually reaching the specimen/camera (unnormalized - their height reflects real "
-    "throughput loss, not just shape): the excitation side has a faint 15%-opacity curve for light "
-    "reaching the specimen and a 100%-opacity curve, drawn on top, for the subset of that light "
-    "actually absorbed by the fluorophore. Both match the efficiency metrics below exactly. "
-    "Use the sidebar's \"Curve visibility\" to persistently hide a curve - clicking its legend "
-    "entry directly only hides it until the next change, since Streamlit doesn't preserve Plotly "
-    "legend state."
+    "solid = detection side (fluorophore emission, emission filter, dichroic). Lines are colored by "
+    "each curve's own characteristic wavelength - peak for most curves, the 50%-transmission "
+    "crossing for the dichroic (a broad plateau, not a single peak). The filled curves show light "
+    "actually reaching the specimen/camera as a true-color gradient across wavelength (unnormalized - "
+    "their height reflects real throughput loss, not just shape): the excitation side has a faint "
+    "15%-alpha curve for light reaching the specimen and a 100%-alpha curve, drawn on top, for the "
+    "subset of that light actually absorbed by the fluorophore. Both match the efficiency metrics "
+    "below exactly. "
+    "Use \"Show\" above to quickly limit the plot to one side (the dichroic stays shown either way), "
+    "or the sidebar's \"Curve visibility\" to persistently hide an individual curve - clicking its "
+    "legend entry directly only hides it until the next change, since Streamlit doesn't preserve "
+    "Plotly legend state."
 )
 
 result = optics.evaluate_path(
