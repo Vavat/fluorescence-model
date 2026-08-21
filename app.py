@@ -193,14 +193,16 @@ fig = plotting.build_figure(
     emission_combined=emission_combined,
     log_y=log_y,
 )
-st.plotly_chart(fig, use_container_width=True)
+st.plotly_chart(fig, use_container_width=True, key="spectral_overlay_chart")
 st.caption(
     "Dashed = illumination side (source, excitation filter, fluorophore excitation); "
     "solid = detection side (fluorophore emission, emission filter, dichroic). The filled curves "
     "show light actually reaching the specimen/camera (unnormalized - their height reflects real "
-    "throughput loss, not just shape): the excitation side has a 50%-opacity curve for light "
+    "throughput loss, not just shape): the excitation side has a faint 15%-opacity curve for light "
     "reaching the specimen and a 100%-opacity curve, drawn on top, for the subset of that light "
-    "actually absorbed by the fluorophore. Both match the efficiency metrics below exactly."
+    "actually absorbed by the fluorophore. Both match the efficiency metrics below exactly. "
+    "Legend clicks to show/hide a trace stick across changes - a trace only resets to visible if "
+    "it disappears (e.g. no dichroic selected) and later comes back."
 )
 
 result = optics.evaluate_path(

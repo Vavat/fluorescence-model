@@ -54,16 +54,51 @@ def test_combined_curves_are_filled():
         assert _trace(fig, name).fill == "tozeroy"
 
 
-def test_excitation_light_is_half_opacity_absorbed_is_full_opacity():
+def test_excitation_light_is_low_opacity_absorbed_is_full_opacity():
     fig = build_figure(
         excitation_combined=_spec(480),
         excitation_absorbed=_spec(480),
         emission_combined=_spec(520),
     )
-    assert _trace(fig, "Excitation light at specimen").opacity == pytest.approx(0.5)
+    # Kept faint so it reads as backdrop and doesn't obscure the "absorbed"
+    # curve drawn on top of it.
+    assert _trace(fig, "Excitation light at specimen").opacity == pytest.approx(0.15)
     assert _trace(fig, "Excitation light absorbed by fluorophore").opacity == pytest.approx(1.0)
     # emission side is unaffected by this change - stays at the existing 50% fill
     assert _trace(fig, "Emission light at camera").opacity == pytest.approx(0.5)
+
+
+def test_traces_have_stable_per_role_uid_regardless_of_which_others_are_present():
+    # A trace's uid must depend only on its own role, not on its position in
+    # fig.data, so Plotly.js can match it to its prior legend visibility
+    # state even when other traces come and go around it.
+    fig_with_dichroic = build_figure(
+        source=_spec(480),
+        emission_filter=_spec(520),
+        dichroic=_spec(500),
+    )
+    fig_without_dichroic = build_figure(
+        source=_spec(480),
+        emission_filter=_spec(520),
+    )
+    assert _trace(fig_with_dichroic, "Source spectrum").uid == _trace(fig_without_dichroic, "Source spectrum").uid
+    assert (
+        _trace(fig_with_dichroic, "Emission filter").uid == _trace(fig_without_dichroic, "Emission filter").uid
+    )
+
+
+def test_combined_traces_sharing_a_color_key_get_distinct_uids():
+    fig = build_figure(excitation_combined=_spec(480), excitation_absorbed=_spec(480))
+    at_specimen = _trace(fig, "Excitation light at specimen")
+    absorbed = _trace(fig, "Excitation light absorbed by fluorophore")
+    assert at_specimen.uid != absorbed.uid
+
+
+def test_figure_sets_a_constant_uirevision_so_legend_state_persists():
+    fig1 = build_figure(source=_spec(480))
+    fig2 = build_figure(source=_spec(490))  # different data, same "shape" of figure
+    assert fig1.layout.uirevision is not None
+    assert fig1.layout.uirevision == fig2.layout.uirevision
 
 
 def test_raw_curves_are_peak_normalized_combined_curves_are_not():
