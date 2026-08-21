@@ -152,6 +152,20 @@ with st.sidebar:
         linewidth_nm = st.number_input("Linewidth (nm)", min_value=0.01, max_value=20.0, value=1.0, step=0.1)
         source_spectrum = sources.laser_spectrum(center_nm, linewidth_nm)
 
+    with st.expander("Curve visibility"):
+        # Backed by st.session_state via `key` - this, not the Plotly legend,
+        # is what actually survives a rerun (see plotting.py's module
+        # docstring for why Plotly's own uid/uirevision mechanism doesn't
+        # work through st.plotly_chart). Clicking a trace's legend entry
+        # directly still works for a quick one-off hide, it just won't stick
+        # past the next rerun.
+        st.multiselect(
+            "Curves shown on the plot",
+            options=plotting.CURVE_NAMES,
+            default=plotting.CURVE_NAMES,
+            key="shown_curves",
+        )
+
 # ------------------------------------------------------------- main panel --
 
 if selected_fluor is None:
@@ -180,6 +194,7 @@ excitation_absorbed = optics.excitation_absorption_spectrum(
 emission_combined = optics.emission_light_spectrum(selected_fluor.emission, dichroic_spec, em_filter_spec)
 
 log_y = st.radio("Y-axis scale", ["Linear", "Log"], horizontal=True) == "Log"
+hidden_names = set(plotting.CURVE_NAMES) - set(st.session_state.get("shown_curves", plotting.CURVE_NAMES))
 
 fig = plotting.build_figure(
     fluorophore_excitation=selected_fluor.excitation,
@@ -192,6 +207,7 @@ fig = plotting.build_figure(
     excitation_absorbed=excitation_absorbed,
     emission_combined=emission_combined,
     log_y=log_y,
+    hidden_names=hidden_names,
 )
 st.plotly_chart(fig, use_container_width=True, key="spectral_overlay_chart")
 st.caption(
@@ -201,8 +217,9 @@ st.caption(
     "throughput loss, not just shape): the excitation side has a faint 15%-opacity curve for light "
     "reaching the specimen and a 100%-opacity curve, drawn on top, for the subset of that light "
     "actually absorbed by the fluorophore. Both match the efficiency metrics below exactly. "
-    "Legend clicks to show/hide a trace stick across changes - a trace only resets to visible if "
-    "it disappears (e.g. no dichroic selected) and later comes back."
+    "Use the sidebar's \"Curve visibility\" to persistently hide a curve - clicking its legend "
+    "entry directly only hides it until the next change, since Streamlit doesn't preserve Plotly "
+    "legend state."
 )
 
 result = optics.evaluate_path(

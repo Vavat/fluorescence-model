@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
 
-from fluorescence_model.plotting import build_figure
+from fluorescence_model.plotting import CURVE_NAMES, build_figure
 from fluorescence_model.spectrum import Spectrum
 
 
@@ -54,18 +54,63 @@ def test_combined_curves_are_filled():
         assert _trace(fig, name).fill == "tozeroy"
 
 
-def test_excitation_light_is_low_opacity_absorbed_is_full_opacity():
+def test_excitation_light_fill_is_faint_absorbed_fill_is_full_strength():
     fig = build_figure(
         excitation_combined=_spec(480),
         excitation_absorbed=_spec(480),
         emission_combined=_spec(520),
     )
-    # Kept faint so it reads as backdrop and doesn't obscure the "absorbed"
-    # curve drawn on top of it.
-    assert _trace(fig, "Excitation light at specimen").opacity == pytest.approx(0.15)
-    assert _trace(fig, "Excitation light absorbed by fluorophore").opacity == pytest.approx(1.0)
+    # opacity is applied to the fillcolor (as an rgba alpha), not the whole
+    # trace, specifically so the boundary line stays visible - see below.
+    assert _trace(fig, "Excitation light at specimen").fillcolor == "rgba(255,127,14,0.15)"
+    assert _trace(fig, "Excitation light absorbed by fluorophore").fillcolor == "rgba(255,127,14,1.0)"
     # emission side is unaffected by this change - stays at the existing 50% fill
-    assert _trace(fig, "Emission light at camera").opacity == pytest.approx(0.5)
+    assert _trace(fig, "Emission light at camera").fillcolor == "rgba(214,39,40,0.5)"
+
+
+def test_filled_curve_lines_stay_fully_opaque_regardless_of_fill_alpha():
+    # The whole point: even a very faint fill must have a crisp, fully
+    # opaque outline, so its true extent stays traceable when another
+    # same-colored trace's fill covers it completely (e.g. "absorbed"
+    # nearly coinciding with "at specimen" for a well-matched fluorophore).
+    fig = build_figure(excitation_combined=_spec(480))
+    trace = _trace(fig, "Excitation light at specimen")
+    assert trace.opacity is None  # not scaled down at the trace level
+    assert trace.line.color == "#ff7f0e"  # the plain, fully-opaque hex color
+
+
+def test_hidden_names_are_drawn_legendonly_not_omitted():
+    fig = build_figure(
+        source=_spec(480),
+        fluorophore_emission=_spec(520),
+        hidden_names={"Source spectrum"},
+    )
+    # still present (so it stays in the legend, re-showable) - just hidden
+    assert _trace(fig, "Source spectrum").visible == "legendonly"
+    assert _trace(fig, "Fluorophore emission").visible is True
+
+
+def test_no_hidden_names_means_everything_visible():
+    fig = build_figure(source=_spec(480))
+    assert _trace(fig, "Source spectrum").visible is True
+
+
+def test_curve_names_constant_matches_actual_legend_names():
+    # app.py's persistent multiselect is built from CURVE_NAMES - if a trace
+    # name here drifts from what build_figure actually emits, the show/hide
+    # control silently stops matching that trace.
+    fig = build_figure(
+        fluorophore_excitation=_spec(480),
+        fluorophore_emission=_spec(520),
+        source=_spec(480),
+        excitation_filter=_spec(480),
+        dichroic=_spec(500),
+        emission_filter=_spec(520),
+        excitation_combined=_spec(480),
+        excitation_absorbed=_spec(480),
+        emission_combined=_spec(520),
+    )
+    assert {t.name for t in fig.data} == set(CURVE_NAMES)
 
 
 def test_traces_have_stable_per_role_uid_regardless_of_which_others_are_present():

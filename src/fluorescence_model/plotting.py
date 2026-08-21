@@ -7,27 +7,41 @@ the excitation/illumination side (source, excitation filter, fluorophore
 excitation), solid for anything on the emission/detection side (fluorophore
 emission, emission filter, dichroic %T, camera).
 
-The computed combined curves are drawn as solid filled areas, deliberately
-NOT normalized, so their height relative to the reference lines shows real
+The computed combined curves are drawn as filled areas, deliberately NOT
+normalized, so their height relative to the reference lines shows real
 throughput loss:
-- excitation_light (15% opacity): source x excitation filter x dichroic
-  reflectance - the light that reaches the specimen. Kept faint so it reads
-  as backdrop and doesn't obscure excitation_absorbed drawn on top of it.
-- excitation_absorbed (100% opacity): the above, further weighted by the
+- excitation_light (15% fill alpha): source x excitation filter x dichroic
+  reflectance - the light that reaches the specimen.
+- excitation_absorbed (100% fill alpha): the above, further weighted by the
   fluorophore's own excitation spectrum - the light that actually drives
-  excitation. Always <= excitation_light point-by-point, drawn on top of it
-  at full opacity so the "absorbed" subset stands out within the "reaches
-  the specimen" curve.
-- emission_combined (50% opacity): fluorophore emission x dichroic
+  excitation. Always <= excitation_light point-by-point, drawn on top of it.
+- emission_combined (50% fill alpha): fluorophore emission x dichroic
   transmission x emission filter - the light that reaches the camera.
 
-Every trace carries a stable `uid` (its semantic role, e.g. "dichroic" or
-"excitation_absorbed") rather than an order-derived one, and the figure sets
-a constant `uirevision`. Together these tell Plotly.js to keep whatever
-show/hide state the user has clicked in the legend for a given trace across
-re-renders (e.g. picking a different fluorophore), instead of resetting
-every trace to visible. A trace only reverts to its default visibility if it
-disappears entirely (e.g. no dichroic selected) and later reappears.
+Only the FILL is scaled by that alpha (via an rgba fillcolor) - each curve's
+boundary LINE is always drawn fully opaque. This matters because
+excitation_light and excitation_absorbed share the same color: whenever a
+fluorophore's excitation efficiency is high across the source's band (the
+common, well-matched case), excitation_absorbed nearly coincides with
+excitation_light, and two same-colored fills that overlap are visually just
+"more of that color" regardless of their stated opacity - orange-over-orange
+is still orange. A crisp outline on excitation_light keeps its true extent
+traceable even when the fill underneath is fully covered by the (also
+orange) absorbed curve on top of it.
+
+Every trace carries a stable `uid` and the figure sets a constant
+`uirevision`, which is the standard Plotly.js recipe for preserving
+legend-click state (and zoom/pan) across figure rebuilds - EXCEPT that
+Streamlit's `st.plotly_chart` always strips trace `uid`s before they reach
+the browser (it calls `plotly.io.to_json(fig, validate=False)`, and
+`remove_uids` defaults to True there - see plotly/io/_json.py). Confirmed
+empirically: even with `uirevision` set and the trace list unchanged between
+reruns, a legend-hidden trace resets to visible on the next Streamlit rerun.
+So `uid`/`uirevision` are kept here (harmless, and Streamlit's docs suggest
+`uirevision` still helps preserve zoom/pan for some chart types) but are NOT
+what makes show/hide persistent - that's `hidden_names` below, driven by
+Streamlit `session_state` (via widget `key`s in app.py), which is the only
+mechanism in this stack that's actually guaranteed to survive a rerun.
 """
 
 from __future__ import annotations
@@ -66,6 +80,12 @@ _COLORS = {
     "emission_combined": "#d62728",
 }
 
+def _rgba(hex_color: str, alpha: float) -> str:
+    h = hex_color.lstrip("#")
+    r, g, b = int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16)
+    return f"rgba({r},{g},{b},{alpha})"
+
+
 # Dashed = excitation/illumination side, solid = emission/detection side.
 _DASH = {
     "excitation": "dash",
@@ -76,6 +96,21 @@ _DASH = {
     "dichroic": "solid",
     "camera": "solid",
 }
+
+# Every curve build_figure can draw, by its legend name, in display order.
+# Exposed so app.py can build show/hide controls (e.g. a multiselect) without
+# duplicating this list, and pass the result back in as `hidden_names`.
+CURVE_NAMES = (
+    "Fluorophore excitation",
+    "Fluorophore emission",
+    "Source spectrum",
+    "Excitation filter",
+    "Dichroic (%T)",
+    "Emission filter",
+    "Excitation light at specimen",
+    "Excitation light absorbed by fluorophore",
+    "Emission light at camera",
+)
 
 
 def build_figure(
@@ -90,11 +125,20 @@ def build_figure(
     emission_combined: Optional[Spectrum] = None,
     grid=DEFAULT_GRID_NM,
     log_y: bool = False,
+    hidden_names: Optional[set] = None,
 ) -> go.Figure:
+    """`hidden_names` (a subset of CURVE_NAMES) draws those traces
+    legend-only (hidden but still listed, re-showable by clicking them) -
+    intended to be driven by a Streamlit widget with a stable `key`, which is
+    what actually makes this persist across reruns (see module docstring)."""
     fig = go.Figure()
+    hidden_names = hidden_names or set()
 
     def _display_y(values: np.ndarray) -> np.ndarray:
         return np.clip(values, _LOG_FLOOR, None) if log_y else values
+
+    def _visibility(name: str):
+        return "legendonly" if name in hidden_names else True
 
     def add_line(spec: Optional[Spectrum], name: str, key: str):
         if spec is None:
@@ -108,27 +152,32 @@ def build_figure(
                 mode="lines",
                 line=dict(color=_COLORS[key], dash=_DASH[key]),
                 opacity=0.9,
-                # Stable per-role id (not order-derived) so Plotly.js can
-                # match this trace to its previous visibility state even
-                # when other traces are added/removed around it.
                 uid=key,
+                visible=_visibility(name),
             )
         )
 
     def add_filled(spec: Optional[Spectrum], name: str, key: str, uid: str, opacity: float = 0.5):
         if spec is None:
             return
+        # `opacity` scales the FILL only (via an rgba fillcolor), while the
+        # boundary line stays fully opaque. Two same-colored fills that
+        # nearly coincide (e.g. "absorbed" sitting almost exactly on top of
+        # "at specimen" whenever the fluorophore's excitation efficiency is
+        # high) are visually indistinguishable as fills - orange-over-orange
+        # is just orange - but the crisp outline still traces the wider
+        # curve's true extent even where the fill underneath is covered.
         fig.add_trace(
             go.Scatter(
                 x=spec.wavelength_nm,
                 y=_display_y(spec.value),
                 name=name,
                 mode="lines",
-                line=dict(color=_COLORS[key], width=1),
+                line=dict(color=_COLORS[key], width=1.5),
                 fill="tozeroy",
-                fillcolor=_COLORS[key],
-                opacity=opacity,
+                fillcolor=_rgba(_COLORS[key], opacity),
                 uid=uid,
+                visible=_visibility(name),
             )
         )
 
