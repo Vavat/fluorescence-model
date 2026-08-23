@@ -78,38 +78,35 @@ empty - add the ones you're actually considering via the sidebar's filter tools 
 
 ### Main panel
 
-- **Y-axis scale**: Linear (default) or Log. Log reveals how deep a filter's out-of-band blocking
-  actually goes (real filters commonly block down to 1e-4 to 1e-6, invisible on a linear axis).
-- **Show**: a four-way switch limiting which curves are plotted, without changing your Curve
-  visibility choices:
+- **Linear/Log radio** (unlabeled, top left above the plot): switches the y-axis scale. Log reveals
+  how deep a filter's out-of-band blocking actually goes (real filters commonly block down to 1e-4 to
+  1e-6, invisible on a linear axis).
+- **Show** (unlabeled, top right above the plot): a four-way switch limiting which curves are
+  plotted, without changing your Curve visibility choices:
   - **Excitation only** / **Emission only** - just that side of the optical path (the dichroic stays
     shown in both, since it's relevant to each).
   - **All** - everything (default).
   - **Excitation leak** - just the curves behind the excitation-bleed warning (see below): the
-    source, dichroic, emission filter, real emission signal, and the leak spectrum itself, so you can
-    see at a glance how much stray excitation light would land in the same wavelengths as genuine
-    emission.
+    source, excitation filter, dichroic, emission filter, and the fluorophore's own emission (for
+    context), plus the leak spectrum itself - so you can see at a glance how much stray excitation
+    light would land in the same wavelengths as genuine emission.
 - **The plot**: dashed lines are the illumination side (source, excitation filter, fluorophore
   excitation), solid lines are the detection side (fluorophore emission, emission filter). Each line
   is colored by its own characteristic wavelength - peak for most curves, the 50%-transmission
   crossing for the dichroic (a broad near-100% plateau, not a single peak, so peak_nm() wouldn't land
   on its physically meaningful cut-on/off edge). The filled curves show light that actually reaches
   the specimen/camera, as a true-color gradient across wavelength, deliberately not normalized so
-  their height reflects real throughput loss:
-  - *Excitation light at specimen* (faint) and *Excitation light absorbed by fluorophore* (solid,
-    drawn on top) - always match the excitation efficiency metric below exactly.
-  - *Emission light at camera* - matches the emission efficiency metric exactly.
-  - *Excitation leak at camera* (dashed, since it's excitation-origin light) - matches the
-    excitation-bleed warning exactly; overlay it against "Emission light at camera" to see whether a
-    leak would land in the same wavelengths as your real signal.
-- **Relative figures of merit**: excitation/emission efficiency and an overall score for the
-  fluorophore + filter/source combination you've picked. These are relative (for comparing candidate
-  combinations against each other for the *same* fluorophore), not absolute brightness predictions -
-  source spectra are relative models and filter/fluorophore curves are unitless fractions, not
-  calibrated radiometric power.
+  their height reflects real throughput loss: *Excitation light at specimen* (faint) and *Excitation
+  light absorbed by fluorophore* (solid, drawn on top), *Emission light at camera*, and *Excitation
+  leak at camera* (dashed, since it's excitation-origin light even though it ends up at the camera -
+  overlay it against "Emission light at camera" to see whether a leak would land in the same
+  wavelengths as your real signal).
+- **Export**: pick a format (CSV, Excel, or JSON) and download the currently-plotted curves as one
+  wavelength-indexed table - values match what's on screen (reference curves peak-normalized, the
+  "light that actually gets there" curves at real relative magnitude).
 - **Warnings**: appear automatically when excitation light is likely to bleed through to the
-  detector, when the excitation filter doesn't separate illumination from detection wavelengths well,
-  or when excitation/emission efficiency is close to zero for the chosen combination.
+  detector (i.e. falls inside both the excitation and emission filter passbands), or when
+  excitation/emission efficiency is close to zero for the chosen combination.
 
 ## Data sources
 
@@ -144,6 +141,7 @@ src/fluorescence_model/
   catalog.py                     pick-list assembly for the UI
   plotting.py                    Plotly figure builder (coloring scheme, gradients, show/hide)
   wavelength_color.py             wavelength -> perceived RGB color approximation
+  export.py                       CSV/Excel/JSON export of the currently-plotted curves
 data/fluorophores/               cached fluorophore spectra (JSON)
 data/filters/                    filter data files + catalog.yaml
 tests/                           pytest suite (parsers, optics math, source models, plotting, color)

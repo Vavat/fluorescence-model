@@ -17,10 +17,6 @@ import numpy as np
 
 from .spectrum import DEFAULT_GRID_NM, Spectrum, integrate
 
-# Below this fraction of a curve's peak, treat it as noise floor for the
-# purposes of bleed-through warnings (avoids flagging trivial <1% overlaps).
-_BLEED_THRESHOLD = 0.02
-
 
 @dataclass
 class PathResult:
@@ -28,7 +24,6 @@ class PathResult:
     emission_efficiency: float  # 0-1, fraction of emitted photons that reach the detector
     overall_score: float  # excitation_efficiency * emission_efficiency
     excitation_bleed: float  # fraction of the source's own spectral power that falls inside both the excitation and emission filter passbands (0-1)
-    emission_crosstalk: float  # fraction of the illumination reaching the sample that sits inside the fluorophore's emission band (0-1)
     warnings: list[str]
 
 
@@ -36,15 +31,6 @@ def _resampled(spec: Optional[Spectrum], grid: np.ndarray) -> np.ndarray:
     if spec is None:
         return np.ones_like(grid)  # "None" filter = pass everything
     return np.clip(spec.resample(grid), 0.0, None)
-
-
-def _overlap_fraction(a: np.ndarray, b: np.ndarray, grid: np.ndarray) -> float:
-    """Fraction of curve a's area that coincides with non-trivial values of b."""
-    a_area = integrate(grid, a)
-    if a_area <= 0:
-        return 0.0
-    mask = b > _BLEED_THRESHOLD
-    return integrate(grid, np.where(mask, a, 0.0)) / a_area
 
 
 def evaluate_path(
@@ -99,24 +85,12 @@ def evaluate_path(
     if src_area > 0:
         excitation_bleed = integrate(grid, src * ex_filt * em_filt) / src_area
 
-    # What fraction of the light actually reaching the sample (source, after
-    # the excitation filter) falls inside the fluorophore's emission band -
-    # i.e. does the illumination itself contain wavelengths you're trying to
-    # detect as signal. Scaled against the illumination's own total power.
-    illumination = src * ex_filt
-    emission_crosstalk = _overlap_fraction(illumination, em_fluor, grid)
-
     warnings: list[str] = []
     if excitation_bleed > 0.05:
         warnings.append(
             f"{excitation_bleed:.0%} of the excitation source's spectral power falls inside both the "
             "excitation and emission filter passbands - that light can mechanically pass through both "
             "filters, so excitation light may bleed through to the detector as background."
-        )
-    if emission_crosstalk > 0.05:
-        warnings.append(
-            f"{emission_crosstalk:.0%} of the light reaching the sample falls inside the fluorophore's "
-            "own emission band - the excitation filter doesn't separate illumination from detection wavelengths well."
         )
     if excitation_efficiency < 0.01:
         warnings.append("Excitation efficiency is near zero - this source/filter combo barely excites this fluorophore.")
@@ -128,7 +102,6 @@ def evaluate_path(
         emission_efficiency=emission_efficiency,
         overall_score=overall_score,
         excitation_bleed=excitation_bleed,
-        emission_crosstalk=emission_crosstalk,
         warnings=warnings,
     )
 
