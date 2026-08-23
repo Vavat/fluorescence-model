@@ -293,8 +293,21 @@ def build_figure(
     else:
         yaxis["range"] = [0, 1.05]
 
+    # TODO: interactive zoom/pan is disabled on both axes for now because it
+    # triggers a real Plotly.js bug: fillgradient's start/stop are meant to
+    # be fixed absolute plot-coordinates (we pin them to grid_min/grid_max
+    # precisely so a wavelength reads as the same color regardless of view),
+    # but zooming corrupts that computation - the gradient rescales to
+    # stretch across whatever's currently visible instead of staying fixed,
+    # so a zoomed-in view shows a full rainbow crammed into a narrow
+    # wavelength window instead of the true, narrower color range. Revisit
+    # by either rebuilding each gradient-filled curve as many small flat-
+    # colored segments (avoids relying on fillgradient at all) or re-enabling
+    # once upstream fixes the interaction between fillgradient and axis
+    # rescaling on zoom/relayout.
+    yaxis["fixedrange"] = True
     fig.update_layout(
-        xaxis=dict(title="Wavelength (nm)", range=[grid_min, grid_max]),
+        xaxis=dict(title="Wavelength (nm)", range=[grid_min, grid_max], fixedrange=True),
         yaxis=yaxis,
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0),
         margin=dict(l=40, r=20, t=40, b=40),

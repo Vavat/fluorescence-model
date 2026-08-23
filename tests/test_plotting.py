@@ -247,3 +247,14 @@ def test_excitation_leak_curve_is_gradient_filled_and_dashed():
     assert trace.fillgradient is not None
     assert trace.line.dash == "dash"
     assert "0.6" in trace.fillgradient.colorscale[0][1]
+
+
+def test_zoom_pan_disabled_on_both_axes():
+    # TODO (see plotting.py): interactive zoom/pan is disabled because it
+    # triggers a Plotly.js bug where fillgradient's fixed start/stop get
+    # recomputed incorrectly on axis rescale, stretching a full rainbow
+    # across whatever's currently zoomed in on instead of staying pinned to
+    # true wavelength colors. Revisit once that's fixed one way or another.
+    fig = build_figure(source=_spec(480))
+    assert fig.layout.xaxis.fixedrange is True
+    assert fig.layout.yaxis.fixedrange is True

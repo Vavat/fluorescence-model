@@ -29,7 +29,8 @@ with st.sidebar:
     st.header("Fluorophore")
     fluorophores = catalog.list_fluorophores()
     fluor_names = [f.name for f in fluorophores]
-    selected_name = st.selectbox("Fluorophore", fluor_names, index=0 if fluor_names else None)
+    default_fluor_index = fluor_names.index("EGFP") if "EGFP" in fluor_names else (0 if fluor_names else None)
+    selected_name = st.selectbox("Fluorophore", fluor_names, index=default_fluor_index)
     selected_fluor = next((f for f in fluorophores if f.name == selected_name), None)
 
     with st.expander("Add a fluorophore"):
@@ -69,14 +70,22 @@ with st.sidebar:
     dichroics = catalog.list_filters("dichroic")
     em_filters = catalog.list_filters("emission")
 
-    def _filter_picker(label, options):
+    def _filter_picker(label, options, default_part_number=None):
         names = ["None"] + [f.display_name for f in options]
-        choice = st.selectbox(label, names)
+        default_index = 0
+        if default_part_number is not None:
+            default_entry = next((f for f in options if f.part_number == default_part_number), None)
+            if default_entry is not None:
+                default_index = names.index(default_entry.display_name)
+        choice = st.selectbox(label, names, index=default_index)
         return next((f for f in options if f.display_name == choice), None)
 
-    selected_ex_filter = _filter_picker("Excitation filter", ex_filters)
-    selected_dichroic = _filter_picker("Dichroic", dichroics)
-    selected_em_filter = _filter_picker("Emission filter", em_filters)
+    # Thorlabs' MDF05-GFP set (excitation/dichroic/emission) as the default
+    # out-of-the-box filter combination, paired with EGFP and the 465nm LED
+    # default below.
+    selected_ex_filter = _filter_picker("Excitation filter", ex_filters, default_part_number="MDF05-GFP")
+    selected_dichroic = _filter_picker("Dichroic", dichroics, default_part_number="MDF05-GFP")
+    selected_em_filter = _filter_picker("Emission filter", em_filters, default_part_number="MDF05-GFP")
 
     with st.expander("Import a filter data file"):
         st.markdown(
@@ -136,7 +145,7 @@ with st.sidebar:
     st.header("Excitation source")
     source_type = st.radio("Type", ["LED", "Laser"], horizontal=True)
     if source_type == "LED":
-        center_nm = st.number_input("Center wavelength (nm)", min_value=200.0, max_value=1200.0, value=470.0, step=1.0)
+        center_nm = st.number_input("Center wavelength (nm)", min_value=200.0, max_value=1200.0, value=465.0, step=1.0)
         fwhm_nm = st.number_input("FWHM (nm)", min_value=1.0, max_value=200.0, value=25.0, step=1.0)
         led_model = st.selectbox(
             "Spectral shape model",
