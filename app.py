@@ -13,7 +13,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent / "src"))
 
 import streamlit as st
 
-from fluorescence_model import catalog, fpbase_client, optics, plotting, sources, tugraz_client
+from fluorescence_model import catalog, export, fpbase_client, optics, plotting, sources, tugraz_client
 from fluorescence_model.filter_import import parse_filter_file
 
 st.set_page_config(page_title="Fluorescence Filter/Source Modeler", layout="wide")
@@ -210,7 +210,7 @@ st.markdown(
 
 col_scale, col_side = st.columns([1, 2])
 with col_scale:
-    log_y = st.radio("Y-axis scale", ["Linear", "Log"], horizontal=True) == "Log"
+    log_y = st.radio("Y-axis scale", ["Linear", "Log"], horizontal=True, label_visibility="collapsed") == "Log"
 with col_side:
     side = st.radio(
         "Show",
@@ -219,6 +219,7 @@ with col_side:
         horizontal=True,
         width="stretch",  # fills the column so the right-justify CSS above has room to push against
         key="side_filter",
+        label_visibility="collapsed",
         help="Dichroic (%T) stays shown in every state. \"Excitation leak\" shows just the curves "
         "behind the excitation-bleed warning below, so you can see how much excitation light "
         "reaching the camera overlaps genuine emission.",
@@ -254,11 +255,42 @@ st.caption(
     "(source x excitation filter x emission filter - deliberately not the dichroic, since that light "
     "has to pass both filters regardless of how well any particular dichroic suppresses it; dashed "
     "since it's excitation-origin light even though it ends up at the camera) is the same quantity "
-    "behind the excitation-bleed warning below. All four match the efficiency/bleed metrics exactly. "
-    "Use \"Show\" above to quickly limit the plot to one side or to just the excitation-leak-relevant "
-    "curves (the dichroic stays shown in every state), or the sidebar's \"Curve visibility\" to "
-    "persistently hide an individual curve - clicking its legend entry directly only hides it until "
-    "the next change, since Streamlit doesn't preserve Plotly legend state."
+    "behind the excitation-bleed warning below. "
+    "The switch above the plot limits it to one side, or to just the excitation-leak-relevant curves "
+    "(the dichroic stays shown in every state); the sidebar's \"Curve visibility\" persistently hides "
+    "an individual curve - clicking its legend entry directly only hides it until the next change, "
+    "since Streamlit doesn't preserve Plotly legend state."
+)
+
+export_table = export.build_export_table(
+    fluorophore_excitation=selected_fluor.excitation,
+    fluorophore_emission=selected_fluor.emission,
+    source=source_spectrum,
+    excitation_filter=ex_filter_spec,
+    dichroic=dichroic_spec,
+    emission_filter=em_filter_spec,
+    excitation_combined=excitation_combined,
+    excitation_absorbed=excitation_absorbed,
+    emission_combined=emission_combined,
+    excitation_leak=excitation_leak,
+)
+col_export_format, col_export_button = st.columns([1, 3])
+with col_export_format:
+    export_format = st.selectbox(
+        "Export format", export.EXPORT_FORMATS, label_visibility="collapsed"
+    )
+with col_export_button:
+    export_data, export_mime, export_ext = export.export_bytes(export_table, export_format)
+    st.download_button(
+        f"Export spectra as {export_format}",
+        data=export_data,
+        file_name=f"fluorescence_spectra.{export_ext}",
+        mime=export_mime,
+    )
+st.caption(
+    "One row per wavelength (300-900nm), one column per curve currently plotted - values match what's "
+    "on screen: reference curves peak-normalized, the four \"light that actually gets there\" curves "
+    "at their real relative magnitude."
 )
 
 result = optics.evaluate_path(
@@ -269,17 +301,6 @@ result = optics.evaluate_path(
     dichroic=dichroic_spec,
     emission_filter=em_filter_spec,
 )
-
-st.subheader("Relative figures of merit")
-st.caption(
-    "These compare candidate filter/source combinations for the *same* fluorophore - they are "
-    "not absolute brightness/photon-flux predictions, since source spectra are relative models "
-    "and filter/fluorophore curves are unitless fractions."
-)
-c1, c2, c3 = st.columns(3)
-c1.metric("Excitation efficiency", f"{result.excitation_efficiency:.1%}")
-c2.metric("Emission efficiency", f"{result.emission_efficiency:.1%}")
-c3.metric("Overall relative score", f"{result.overall_score:.1%}")
 
 for w in result.warnings:
     st.warning(w)
