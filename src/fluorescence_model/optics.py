@@ -27,7 +27,7 @@ class PathResult:
     excitation_efficiency: float  # 0-1, fraction of source spectrum usefully driving excitation
     emission_efficiency: float  # 0-1, fraction of emitted photons that reach the detector
     overall_score: float  # excitation_efficiency * emission_efficiency
-    excitation_bleed: float  # fraction of the source's own spectral power that reaches the detector unblocked (0-1)
+    excitation_bleed: float  # fraction of the source's own spectral power that falls inside both the excitation and emission filter passbands (0-1)
     emission_crosstalk: float  # fraction of the illumination reaching the sample that sits inside the fluorophore's emission band (0-1)
     warnings: list[str]
 
@@ -85,14 +85,19 @@ def evaluate_path(
 
     overall_score = excitation_efficiency * emission_efficiency
 
-    # What fraction of the source's own spectral power would reach the detector
-    # unblocked (via the same dichroic-transmit + emission-filter path emitted
-    # light takes) - e.g. from back-scatter/reflection off the sample. Scaled
-    # against the source's total power, so "no emission filter/dichroic at all"
+    # What fraction of the source's own spectral power sits inside BOTH the
+    # excitation and emission filter passbands - the only way excitation
+    # light can mechanically reach the camera at all, since it has to pass
+    # through the excitation filter on the way in and the emission filter on
+    # the way out; the dichroic isn't included here on purpose, since a real
+    # dichroic is never a perfect reflector/transmitter and this is meant to
+    # capture the leak risk that's fundamental to the filter choice itself,
+    # not however well (or poorly) a particular dichroic happens to suppress
+    # it. Scaled against the source's total power, so "no filters at all"
     # correctly reads as ~100% (everything gets through), not a diluted number.
     excitation_bleed = 0.0
     if src_area > 0:
-        excitation_bleed = integrate(grid, src * dichroic_T * em_filt) / src_area
+        excitation_bleed = integrate(grid, src * ex_filt * em_filt) / src_area
 
     # What fraction of the light actually reaching the sample (source, after
     # the excitation filter) falls inside the fluorophore's emission band -
@@ -104,9 +109,9 @@ def evaluate_path(
     warnings: list[str] = []
     if excitation_bleed > 0.05:
         warnings.append(
-            f"{excitation_bleed:.0%} of the excitation source's spectral power would reach the "
-            "detector unblocked (e.g. via back-scatter) through the current dichroic/emission filter - "
-            "excitation light may bleed through as background."
+            f"{excitation_bleed:.0%} of the excitation source's spectral power falls inside both the "
+            "excitation and emission filter passbands - that light can mechanically pass through both "
+            "filters, so excitation light may bleed through to the detector as background."
         )
     if emission_crosstalk > 0.05:
         warnings.append(
@@ -202,5 +207,40 @@ def emission_light_spectrum(
         value=em * dichroic_T * em_filt,
         label="Emission light at camera",
         kind="emission",
+        source="computed",
+    )
+
+
+def excitation_leak_spectrum(
+    source: Spectrum,
+    excitation_filter: Optional[Spectrum] = None,
+    emission_filter: Optional[Spectrum] = None,
+    grid: np.ndarray = DEFAULT_GRID_NM,
+) -> Spectrum:
+    """The excitation source's own spectral power that could mechanically
+    reach the camera - source x excitation filter transmission x emission
+    filter transmission. Exactly the integrand behind `evaluate_path`'s
+    excitation_bleed metric, so overlaying this against
+    `emission_light_spectrum` (the real signal) shows where leaking
+    excitation light would actually show up relative to genuine emission.
+    Deliberately NOT peak-normalized, same reasoning as the other combined
+    spectra.
+
+    Note this deliberately does NOT include the dichroic: excitation light
+    has to pass through the excitation filter on the way to the sample and
+    the emission filter on the way to the detector no matter what, so those
+    two are the only things it can't mechanically get around - a dichroic is
+    never a perfect reflector/transmitter, so leaning on it to suppress a
+    leak that's already possible per the two filters alone would understate
+    the risk that's fundamental to the filter selection itself.
+    """
+    src = np.clip(source.resample(grid), 0.0, None)
+    ex_filt = _resampled(excitation_filter, grid)
+    em_filt = _resampled(emission_filter, grid)
+    return Spectrum(
+        wavelength_nm=grid.copy(),
+        value=src * ex_filt * em_filt,
+        label="Excitation leak at camera",
+        kind="source",
         source="computed",
     )

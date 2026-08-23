@@ -12,21 +12,30 @@ Coloring scheme (fixed, not a switch - this is the settled design):
   typically a broad near-100% plateau, not a single peak, so its physically
   meaningful characteristic wavelength is the cut-on/cut-off edge, not
   wherever peak_nm() happens to land in that plateau (possibly on ripple).
-- The three computed "light that actually gets there" curves (excitation
-  light at specimen, excitation light absorbed by fluorophore, emission
-  light at camera) are filled areas with a horizontal color gradient
-  following the true color of light at each wavelength (Plotly
-  `fillgradient`), deliberately NOT normalized so their height shows real
-  throughput loss. The gradient's start/stop are pinned to the plot's full
-  x-axis range (not each curve's own narrower range) so a given wavelength
-  reads as the same color on every curve, not rescaled per trace.
+- The computed "light that actually gets there" curves (excitation light at
+  specimen, excitation light absorbed by fluorophore, emission light at
+  camera, excitation leak at camera) are filled areas with a horizontal
+  color gradient following the true color of light at each wavelength
+  (Plotly `fillgradient`), deliberately NOT normalized so their height shows
+  real throughput loss. The gradient's start/stop are pinned to the plot's
+  full x-axis range (not each curve's own narrower range) so a given
+  wavelength reads as the same color on every curve, not rescaled per trace.
 
-Alpha for the three gradient-filled curves is baked directly into their
-colorscale stops (as an rgba alpha), not the trace's own `opacity`, and each
-still gets a crisp, fully-opaque neutral outline:
+Alpha for the gradient-filled curves is baked directly into their colorscale
+stops (as an rgba alpha), not the trace's own `opacity`, and each still gets
+a crisp, fully-opaque neutral outline:
 - excitation light at specimen: 15% alpha (faint backdrop)
 - excitation light absorbed by fluorophore: 100% alpha, drawn on top
 - emission light at camera: 50% alpha
+- excitation leak at camera (source x excitation filter x emission filter,
+  deliberately NOT the dichroic - the same integrand as evaluate_path's
+  excitation_bleed metric, see optics.excitation_leak_spectrum): 60% alpha,
+  dashed outline even though it ends up at the camera, since it's
+  excitation-origin light and dashing it visually contrasts it against the
+  solid "real signal" emission curve.
+  CURVE_NAMES/EXCITATION_SIDE_CURVES/EMISSION_SIDE_CURVES/
+  LEAK_RELEVANT_CURVES/SIDE_VISIBLE_CURVES below drive app.py's "Show"
+  control (Excitation only / All / Emission only / Excitation leak).
 
 This matters because excitation-light-at-specimen and excitation-absorbed
 are drawn with the exact same gradient - whenever a fluorophore's excitation
@@ -70,10 +79,11 @@ _LOG_FLOOR = 1e-6
 # color by (e.g. an all-zero spectrum) - shouldn't normally happen.
 _FALLBACK_COLOR = "#333333"
 
-# Fill alpha for each of the three gradient-filled combined curves.
+# Fill alpha for each of the gradient-filled combined curves.
 _EXCITATION_AT_SPECIMEN_ALPHA = 0.15
 _EXCITATION_ABSORBED_ALPHA = 1.0
 _EMISSION_AT_CAMERA_ALPHA = 0.5
+_EXCITATION_LEAK_ALPHA = 0.6
 
 # Constant uirevision so Plotly.js preserves user-driven state (legend
 # show/hide clicks, zoom/pan) across figure rebuilds - see module docstring.
@@ -92,12 +102,15 @@ CURVE_NAMES = (
     "Excitation light at specimen",
     "Excitation light absorbed by fluorophore",
     "Emission light at camera",
+    "Excitation leak at camera",
 )
 
-# The illumination-side and detection-side curve names, for a coarse
-# excitation-only/emission-only/both display filter (app.py) - "Dichroic
-# (%T)" deliberately belongs to neither, since it's relevant to both sides
-# and stays shown regardless of which side is selected.
+# The illumination-side and detection-side curve names, for the coarse
+# excitation-only/emission-only display filter (app.py's "Show" control) -
+# "Dichroic (%T)" and "Excitation leak at camera" deliberately belong to
+# neither: the dichroic is relevant to both sides and stays shown in every
+# state, and the leak curve is a cross-cutting diagnostic (see
+# LEAK_RELEVANT_CURVES) rather than a plain one-side reference curve.
 EXCITATION_SIDE_CURVES = (
     "Fluorophore excitation",
     "Source spectrum",
@@ -110,6 +123,37 @@ EMISSION_SIDE_CURVES = (
     "Emission filter",
     "Emission light at camera",
 )
+
+# What to show for the "Excitation leak" state of app.py's "Show" control:
+# just the curves relevant to evaluate_path's excitation_bleed calculation
+# (source, excitation filter, emission filter, and the leak spectrum itself -
+# see optics.excitation_leak_spectrum, which deliberately excludes the
+# dichroic) plus the fluorophore's own emission for context. "Emission light
+# at camera" is deliberately NOT included here - it would otherwise be the
+# only solid-looking fill in this view and reads as "the real signal", which
+# invites comparing the leak's magnitude against it; that comparison isn't
+# actually meaningful since the leak calculation doesn't route through the
+# dichroic the way real emission does. Dichroic (%T) stays shown per the
+# same always-shown convention as the other three states, even though it
+# isn't one of the leak calculation's own factors.
+LEAK_RELEVANT_CURVES = (
+    "Source spectrum",
+    "Excitation filter",
+    "Dichroic (%T)",
+    "Emission filter",
+    "Fluorophore emission",
+    "Excitation leak at camera",
+)
+
+# What's visible for each state of app.py's "Show" control, keyed by the
+# same labels the UI uses - exposed here so app.py doesn't have to
+# reconstruct this mapping itself.
+SIDE_VISIBLE_CURVES = {
+    "Excitation only": frozenset(EXCITATION_SIDE_CURVES) | {"Dichroic (%T)"},
+    "All": frozenset(CURVE_NAMES),
+    "Emission only": frozenset(EMISSION_SIDE_CURVES) | {"Dichroic (%T)"},
+    "Excitation leak": frozenset(LEAK_RELEVANT_CURVES),
+}
 
 
 def _wavelength_gradient_stops(wl_min: float, wl_max: float, alpha: float, n: int = 60) -> list:
@@ -135,6 +179,7 @@ def build_figure(
     excitation_combined: Optional[Spectrum] = None,
     excitation_absorbed: Optional[Spectrum] = None,
     emission_combined: Optional[Spectrum] = None,
+    excitation_leak: Optional[Spectrum] = None,
     grid=DEFAULT_GRID_NM,
     log_y: bool = False,
     hidden_names: Optional[set] = None,
@@ -233,6 +278,13 @@ def build_figure(
         uid="emission_light_at_camera",
         dash="solid",
         alpha=_EMISSION_AT_CAMERA_ALPHA,
+    )
+    add_gradient_filled(
+        excitation_leak,
+        "Excitation leak at camera",
+        uid="excitation_leak_at_camera",
+        dash="dash",  # it's excitation-origin light, dashed to contrast with the solid real emission signal
+        alpha=_EXCITATION_LEAK_ALPHA,
     )
 
     yaxis: dict = dict(title="Normalized intensity / transmission", type="log" if log_y else "linear")

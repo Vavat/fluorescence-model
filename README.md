@@ -14,23 +14,102 @@ a given fluorophore, by modeling spectral overlap through the optical path.
   files you download from a manufacturer's product page - see
   [`data/filters/README.md`](data/filters/README.md).
 - Models an LED or laser source from just a center wavelength and FWHM/linewidth.
-- Plots everything overlaid and normalized, and computes relative excitation/emission efficiency
-  scores plus bleed-through warnings for the combination you've picked.
+- Plots everything overlaid, and computes relative excitation/emission efficiency scores plus
+  bleed-through warnings for the combination you've picked.
 
-## Getting started
+## Deployment
 
-```bash
+This is a local Streamlit app - "deploying" it means running it on your own machine (or any machine
+you can `pip install` on); there's no server component to stand up separately.
+
+**Prerequisites**: Python 3.10+.
+
+```powershell
+git clone <this repo's URL>
+cd fluorescence-model
+
 python -m venv .venv
-.venv\Scripts\activate            # Windows
+.venv\Scripts\Activate.ps1        # Windows PowerShell
+# .venv\Scripts\activate.bat      # Windows cmd.exe, instead
+# source .venv/bin/activate       # macOS/Linux, instead
+
 pip install -r requirements.txt
-pip install -e .
+pip install -e .                  # installs this repo's own package (src/fluorescence_model) in editable mode
+
+pytest                            # optional - confirms the install works (should be all green)
+
 streamlit run app.py
 ```
 
-Streamlit opens the app in your browser. A handful of common fluorophores (EGFP, mCherry, DAPI,
-Alexa Fluor 488/568/647, Cy3, Cy5) are bundled in `data/fluorophores/` so it's useful immediately;
-add more from the sidebar. Filters start empty - add the ones you're actually considering via the
-sidebar's "Import a filter data file" tool.
+Streamlit prints a local URL (typically `http://localhost:8501`) and opens it in your browser
+automatically. Leave the terminal running - closing it stops the app. To stop it yourself, press
+`Ctrl+C` in that terminal.
+
+**If you edit the code**: Streamlit auto-reloads on save, but only for `app.py` itself - editing any
+other file (`plotting.py`, `optics.py`, etc.) requires a full restart (`Ctrl+C`, then `streamlit run
+app.py` again) to take effect, since Python keeps already-imported modules cached in memory for the
+life of the process.
+
+A handful of common fluorophores (EGFP, mCherry, DAPI, Alexa Fluor 488/568/647, Cy3, Cy5) are bundled
+in `data/fluorophores/` so the app is useful immediately; add more from the sidebar. Filters start
+empty - add the ones you're actually considering via the sidebar's filter tools (see below).
+
+## Using the app
+
+### Sidebar
+
+- **Fluorophore**: pick from what's already downloaded. **Add a fluorophore** fetches a new one -
+  either by name from FPbase, or (one dye at a time, on request) from fluorophores.tugraz.at.
+- **Filters** - three dropdowns (Excitation filter, Dichroic, Emission filter), each defaulting to
+  "None" (pass-through). Populate them via:
+  - **Import a filter data file**: upload a raw data file you've downloaded from a manufacturer's
+    product page (xlsx/csv/txt) - the importer auto-detects the table inside it. See
+    [`data/filters/README.md`](data/filters/README.md) for where to find these on Thorlabs/Edmund/
+    Semrock/Chroma sites.
+  - **Fetch a filter from FPbase**: look up a real commercial filter by (fuzzy) name/part number, no
+    file needed, for whatever FPbase's aggregated catalog happens to have.
+- **Excitation source**: choose **LED** or **Laser**, then set its center wavelength and
+  FWHM/linewidth. For an LED, also choose the spectral shape model - "Gaussian in wavenumber"
+  (recommended, matches the asymmetric shape real LEDs actually have) or a simpler two-sided
+  exponential decay.
+- **Curve visibility**: a multiselect of every curve the plot can draw - uncheck one to persistently
+  hide it. This is the reliable way to hide a curve; clicking its entry directly in the plot's legend
+  only hides it until the next change (Streamlit doesn't preserve that click across a rerun).
+
+### Main panel
+
+- **Y-axis scale**: Linear (default) or Log. Log reveals how deep a filter's out-of-band blocking
+  actually goes (real filters commonly block down to 1e-4 to 1e-6, invisible on a linear axis).
+- **Show**: a four-way switch limiting which curves are plotted, without changing your Curve
+  visibility choices:
+  - **Excitation only** / **Emission only** - just that side of the optical path (the dichroic stays
+    shown in both, since it's relevant to each).
+  - **All** - everything (default).
+  - **Excitation leak** - just the curves behind the excitation-bleed warning (see below): the
+    source, dichroic, emission filter, real emission signal, and the leak spectrum itself, so you can
+    see at a glance how much stray excitation light would land in the same wavelengths as genuine
+    emission.
+- **The plot**: dashed lines are the illumination side (source, excitation filter, fluorophore
+  excitation), solid lines are the detection side (fluorophore emission, emission filter). Each line
+  is colored by its own characteristic wavelength - peak for most curves, the 50%-transmission
+  crossing for the dichroic (a broad near-100% plateau, not a single peak, so peak_nm() wouldn't land
+  on its physically meaningful cut-on/off edge). The filled curves show light that actually reaches
+  the specimen/camera, as a true-color gradient across wavelength, deliberately not normalized so
+  their height reflects real throughput loss:
+  - *Excitation light at specimen* (faint) and *Excitation light absorbed by fluorophore* (solid,
+    drawn on top) - always match the excitation efficiency metric below exactly.
+  - *Emission light at camera* - matches the emission efficiency metric exactly.
+  - *Excitation leak at camera* (dashed, since it's excitation-origin light) - matches the
+    excitation-bleed warning exactly; overlay it against "Emission light at camera" to see whether a
+    leak would land in the same wavelengths as your real signal.
+- **Relative figures of merit**: excitation/emission efficiency and an overall score for the
+  fluorophore + filter/source combination you've picked. These are relative (for comparing candidate
+  combinations against each other for the *same* fluorophore), not absolute brightness predictions -
+  source spectra are relative models and filter/fluorophore curves are unitless fractions, not
+  calibrated radiometric power.
+- **Warnings**: appear automatically when excitation light is likely to bleed through to the
+  detector, when the excitation filter doesn't separate illumination from detection wavelengths well,
+  or when excitation/emission efficiency is close to zero for the chosen combination.
 
 ## Data sources
 
@@ -56,17 +135,18 @@ sidebar's "Import a filter data file" tool.
 ```
 app.py                          Streamlit UI
 src/fluorescence_model/
-  spectrum.py                   Spectrum type + resampling/integration helpers
-  fpbase_client.py               FPbase fetch + cache
+  spectrum.py                   Spectrum type + resampling/integration/peak/crossing helpers
+  fpbase_client.py               FPbase fetch + cache (fluorophores and filters)
   tugraz_client.py               fluorophores.tugraz.at single-lookup fetch + cache
   filter_import.py               manufacturer file sniffing/parsing
   sources.py                     LED/laser spectral models
-  optics.py                      overlap-integral efficiency/bleed-through math
+  optics.py                      overlap-integral efficiency/bleed-through/leak math
   catalog.py                     pick-list assembly for the UI
-  plotting.py                    Plotly figure builder
+  plotting.py                    Plotly figure builder (coloring scheme, gradients, show/hide)
+  wavelength_color.py             wavelength -> perceived RGB color approximation
 data/fluorophores/               cached fluorophore spectra (JSON)
 data/filters/                    filter data files + catalog.yaml
-tests/                           pytest suite (parsers, optics math, source models)
+tests/                           pytest suite (parsers, optics math, source models, plotting, color)
 ```
 
 ## Testing

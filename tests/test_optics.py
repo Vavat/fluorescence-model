@@ -5,6 +5,7 @@ from fluorescence_model.optics import (
     emission_light_spectrum,
     evaluate_path,
     excitation_absorption_spectrum,
+    excitation_leak_spectrum,
     excitation_light_spectrum,
 )
 from fluorescence_model.spectrum import Spectrum
@@ -233,3 +234,50 @@ def test_excitation_absorption_spectrum_matches_excitation_efficiency_integrand(
     src_area = np.trapezoid(source.resample(GRID), GRID)
     expected = np.trapezoid(absorbed.resample(GRID), GRID) / src_area
     assert result.excitation_efficiency == pytest.approx(expected, abs=1e-9)
+
+
+def test_excitation_leak_spectrum_is_source_times_ex_filter_times_em_filter():
+    source = _tophat(480, 10, kind="source", peak=0.8)
+    ex_filter = _tophat(480, 10, kind="filter_T", peak=0.6)
+    em_filter = _tophat(480, 10, kind="filter_T", peak=0.5)
+
+    leak = excitation_leak_spectrum(source, ex_filter, em_filter)
+    expected = source.resample(GRID) * ex_filter.resample(GRID) * em_filter.resample(GRID)
+    assert np.allclose(leak.resample(GRID), expected)
+    assert leak.value.max() == pytest.approx(0.8 * 0.6 * 0.5, abs=1e-6)
+
+
+def test_excitation_leak_spectrum_ignores_dichroic_by_design():
+    # deliberately excludes the dichroic: excitation light has to pass
+    # through the excitation filter on the way in and the emission filter on
+    # the way out regardless of the dichroic, which is never a perfect
+    # reflector/transmitter - see the function's docstring.
+    source = _tophat(480, 10, kind="source")
+    leak_with_no_filters = excitation_leak_spectrum(source)
+    assert np.allclose(leak_with_no_filters.resample(GRID), source.resample(GRID))
+
+
+def test_excitation_leak_spectrum_requires_both_filters_to_overlap():
+    # no overlap between the excitation and emission filter bands -> zero
+    # leak, however wide the source is, since the light can't mechanically
+    # get through both filters at once.
+    source = _tophat(480, 100, kind="source")
+    ex_filter = _tophat(480, 10, kind="filter_T")
+    em_filter = _tophat(600, 10, kind="filter_T")  # far away, no overlap with ex_filter
+    leak = excitation_leak_spectrum(source, ex_filter, em_filter)
+    assert leak.value.max() == pytest.approx(0.0, abs=1e-9)
+
+
+def test_excitation_leak_spectrum_matches_excitation_bleed_metric_exactly():
+    ex_fluor = _tophat(480, 10, kind="excitation")
+    em_fluor = _tophat(520, 10, kind="emission")
+    source = _tophat(480, 30, kind="source")
+    ex_filter = _tophat(480, 10, kind="filter_T")
+    em_filter = _tophat(500, 15, kind="filter_T")  # overlaps ex_filter's edge, like the bleed-through test above
+
+    result = evaluate_path(ex_fluor, em_fluor, source, excitation_filter=ex_filter, emission_filter=em_filter)
+    leak = excitation_leak_spectrum(source, ex_filter, em_filter)
+
+    src_area = np.trapezoid(source.resample(GRID), GRID)
+    expected = np.trapezoid(leak.resample(GRID), GRID) / src_area
+    assert result.excitation_bleed == pytest.approx(expected, abs=1e-9)

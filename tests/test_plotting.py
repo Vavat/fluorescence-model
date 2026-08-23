@@ -1,7 +1,14 @@
 import numpy as np
 import pytest
 
-from fluorescence_model.plotting import CURVE_NAMES, EMISSION_SIDE_CURVES, EXCITATION_SIDE_CURVES, build_figure
+from fluorescence_model.plotting import (
+    CURVE_NAMES,
+    EMISSION_SIDE_CURVES,
+    EXCITATION_SIDE_CURVES,
+    LEAK_RELEVANT_CURVES,
+    SIDE_VISIBLE_CURVES,
+    build_figure,
+)
 from fluorescence_model.spectrum import Spectrum
 from fluorescence_model.wavelength_color import wavelength_to_hex
 
@@ -166,6 +173,7 @@ def test_curve_names_constant_matches_actual_legend_names():
         excitation_combined=_spec(480),
         excitation_absorbed=_spec(480),
         emission_combined=_spec(520),
+        excitation_leak=_spec(480),
     )
     assert {t.name for t in fig.data} == set(CURVE_NAMES)
 
@@ -203,10 +211,39 @@ def test_none_inputs_are_simply_omitted():
     assert names == {"Source spectrum"}
 
 
-def test_excitation_and_emission_side_groupings_partition_curve_names_excluding_dichroic():
-    # app.py's excitation-only/emission-only/both switch relies on these two
-    # groups covering every curve except the dichroic (which stays shown in
-    # all three states) exactly once, with no overlap or omission.
+def test_excitation_and_emission_side_groupings_partition_curve_names():
+    # app.py's "Show" control relies on these two groups covering every
+    # curve except the dichroic (always shown) and the leak curve (its own
+    # dedicated state) exactly once, with no overlap or omission.
     assert set(EXCITATION_SIDE_CURVES) & set(EMISSION_SIDE_CURVES) == set()
-    covered = set(EXCITATION_SIDE_CURVES) | set(EMISSION_SIDE_CURVES) | {"Dichroic (%T)"}
+    covered = set(EXCITATION_SIDE_CURVES) | set(EMISSION_SIDE_CURVES)
+    covered |= {"Dichroic (%T)", "Excitation leak at camera"}
     assert covered == set(CURVE_NAMES)
+
+
+def test_leak_relevant_curves_are_all_real_curve_names():
+    assert set(LEAK_RELEVANT_CURVES) <= set(CURVE_NAMES)
+    assert "Excitation leak at camera" in LEAK_RELEVANT_CURVES
+    assert "Excitation filter" in LEAK_RELEVANT_CURVES  # part of the leak calculation itself
+    assert "Dichroic (%T)" in LEAK_RELEVANT_CURVES  # always-shown convention, even though not part of the calc
+    # deliberately excluded - see LEAK_RELEVANT_CURVES's comment for why
+    assert "Emission light at camera" not in LEAK_RELEVANT_CURVES
+
+
+def test_side_visible_curves_cover_all_four_states_and_only_real_names():
+    assert set(SIDE_VISIBLE_CURVES) == {"Excitation only", "All", "Emission only", "Excitation leak"}
+    for visible in SIDE_VISIBLE_CURVES.values():
+        assert visible <= set(CURVE_NAMES)
+    assert SIDE_VISIBLE_CURVES["All"] == set(CURVE_NAMES)
+    assert "Dichroic (%T)" in SIDE_VISIBLE_CURVES["Excitation only"]
+    assert "Dichroic (%T)" in SIDE_VISIBLE_CURVES["Emission only"]
+    assert "Emission light at camera" not in SIDE_VISIBLE_CURVES["Excitation leak"]
+
+
+def test_excitation_leak_curve_is_gradient_filled_and_dashed():
+    fig = build_figure(excitation_leak=_spec(480))
+    trace = _trace(fig, "Excitation leak at camera")
+    assert trace.fill == "tozeroy"
+    assert trace.fillgradient is not None
+    assert trace.line.dash == "dash"
+    assert "0.6" in trace.fillgradient.colorscale[0][1]

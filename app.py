@@ -192,27 +192,40 @@ excitation_absorbed = optics.excitation_absorption_spectrum(
     source_spectrum, selected_fluor.excitation, ex_filter_spec, dichroic_spec
 )
 emission_combined = optics.emission_light_spectrum(selected_fluor.emission, dichroic_spec, em_filter_spec)
+excitation_leak = optics.excitation_leak_spectrum(source_spectrum, ex_filter_spec, em_filter_spec)
 
-col_scale, col_side = st.columns([1, 1])
+# Right-justify the "Show" radio group within its column - it's a plain
+# st.radio (not st.segmented_control's larger buttons) specifically to stay
+# small and match "Y-axis scale"'s own visual weight. Scoped to this one
+# widget via its `st-key-<key>` class (a stable, documented Streamlit hook),
+# not a global override.
+st.markdown(
+    """
+    <style>
+    div.st-key-side_filter [data-testid="stRadioGroup"] { justify-content: flex-end; }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
+
+col_scale, col_side = st.columns([1, 2])
 with col_scale:
     log_y = st.radio("Y-axis scale", ["Linear", "Log"], horizontal=True) == "Log"
 with col_side:
-    side = st.segmented_control(
+    side = st.radio(
         "Show",
-        ["Excitation only", "Both", "Emission only"],
-        default="Both",
-        required=True,
+        ["Excitation only", "All", "Emission only", "Excitation leak"],
+        index=1,  # "All"
+        horizontal=True,
+        width="stretch",  # fills the column so the right-justify CSS above has room to push against
         key="side_filter",
-        help="Dichroic (%T) stays shown in all three states - it's relevant to both sides.",
+        help="Dichroic (%T) stays shown in every state. \"Excitation leak\" shows just the curves "
+        "behind the excitation-bleed warning below, so you can see how much excitation light "
+        "reaching the camera overlaps genuine emission.",
     )
 
-side_hidden = {
-    "Excitation only": set(plotting.EMISSION_SIDE_CURVES),
-    "Emission only": set(plotting.EXCITATION_SIDE_CURVES),
-    "Both": set(),
-}[side]
 hidden_names = set(plotting.CURVE_NAMES) - set(st.session_state.get("shown_curves", plotting.CURVE_NAMES))
-hidden_names |= side_hidden
+hidden_names |= set(plotting.CURVE_NAMES) - plotting.SIDE_VISIBLE_CURVES[side]
 
 fig = plotting.build_figure(
     fluorophore_excitation=selected_fluor.excitation,
@@ -224,6 +237,7 @@ fig = plotting.build_figure(
     excitation_combined=excitation_combined,
     excitation_absorbed=excitation_absorbed,
     emission_combined=emission_combined,
+    excitation_leak=excitation_leak,
     log_y=log_y,
     hidden_names=hidden_names,
 )
@@ -236,12 +250,15 @@ st.caption(
     "actually reaching the specimen/camera as a true-color gradient across wavelength (unnormalized - "
     "their height reflects real throughput loss, not just shape): the excitation side has a faint "
     "15%-alpha curve for light reaching the specimen and a 100%-alpha curve, drawn on top, for the "
-    "subset of that light actually absorbed by the fluorophore. Both match the efficiency metrics "
-    "below exactly. "
-    "Use \"Show\" above to quickly limit the plot to one side (the dichroic stays shown either way), "
-    "or the sidebar's \"Curve visibility\" to persistently hide an individual curve - clicking its "
-    "legend entry directly only hides it until the next change, since Streamlit doesn't preserve "
-    "Plotly legend state."
+    "subset of that light actually absorbed by the fluorophore. \"Excitation leak at camera\" "
+    "(source x excitation filter x emission filter - deliberately not the dichroic, since that light "
+    "has to pass both filters regardless of how well any particular dichroic suppresses it; dashed "
+    "since it's excitation-origin light even though it ends up at the camera) is the same quantity "
+    "behind the excitation-bleed warning below. All four match the efficiency/bleed metrics exactly. "
+    "Use \"Show\" above to quickly limit the plot to one side or to just the excitation-leak-relevant "
+    "curves (the dichroic stays shown in every state), or the sidebar's \"Curve visibility\" to "
+    "persistently hide an individual curve - clicking its legend entry directly only hides it until "
+    "the next change, since Streamlit doesn't preserve Plotly legend state."
 )
 
 result = optics.evaluate_path(
