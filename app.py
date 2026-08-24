@@ -147,15 +147,7 @@ with st.sidebar:
     if source_type == "LED":
         center_nm = st.number_input("Center wavelength (nm)", min_value=200.0, max_value=1200.0, value=465.0, step=1.0)
         fwhm_nm = st.number_input("FWHM (nm)", min_value=1.0, max_value=200.0, value=25.0, step=1.0)
-        led_model = st.selectbox(
-            "Spectral shape model",
-            sources.LED_MODELS,
-            format_func=lambda m: {
-                "gaussian_wavenumber": "Gaussian in wavenumber (recommended - matches real LED asymmetry)",
-                "two_sided_exp": "Two-sided exponential decay (simple, symmetric)",
-            }[m],
-        )
-        source_spectrum = sources.led_spectrum(center_nm, fwhm_nm, model=led_model)
+        source_spectrum = sources.led_spectrum(center_nm, fwhm_nm)
     else:
         center_nm = st.number_input("Center wavelength (nm)", min_value=200.0, max_value=1200.0, value=488.0, step=0.5)
         linewidth_nm = st.number_input("Linewidth (nm)", min_value=0.01, max_value=20.0, value=1.0, step=0.1)

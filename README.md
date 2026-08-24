@@ -69,9 +69,8 @@ empty - add the ones you're actually considering via the sidebar's filter tools 
   - **Fetch a filter from FPbase**: look up a real commercial filter by (fuzzy) name/part number, no
     file needed, for whatever FPbase's aggregated catalog happens to have.
 - **Excitation source**: choose **LED** or **Laser**, then set its center wavelength and
-  FWHM/linewidth. For an LED, also choose the spectral shape model - "Gaussian in wavenumber"
-  (recommended, matches the asymmetric shape real LEDs actually have) or a simpler two-sided
-  exponential decay.
+  FWHM/linewidth. LEDs are modeled as a Gaussian in wavenumber space, which naturally comes out
+  asymmetric in wavelength - matching the shape real LED datasheets actually have.
 - **Curve visibility**: a multiselect of every curve the plot can draw - uncheck one to persistently
   hide it. This is the reliable way to hide a curve; clicking its entry directly in the plot's legend
   only hides it until the next change (Streamlit doesn't preserve that click across a rerun).

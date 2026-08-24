@@ -11,49 +11,38 @@ import numpy as np
 
 from .spectrum import DEFAULT_GRID_NM, Spectrum
 
-LED_MODELS = ("gaussian_wavenumber", "two_sided_exp")
-
-
 def led_spectrum(
     center_nm: float,
     fwhm_nm: float,
-    model: str = "gaussian_wavenumber",
     grid: np.ndarray = DEFAULT_GRID_NM,
 ) -> Spectrum:
-    """Model an LED's emission spectrum from its center wavelength and FWHM.
+    """Model an LED's emission spectrum from its center wavelength and FWHM,
+    as a Gaussian defined in wavenumber (1/lambda) space, transformed back to
+    wavelength. This is the standard approximation for LED spectra (see e.g.
+    Ohno, "Spectral design considerations for white LED color rendering",
+    Opt. Eng. 44(11), 2005): because LED emission is fundamentally a function
+    of photon energy, a Gaussian that's symmetric in energy/wavenumber comes
+    out asymmetric in wavelength - a sharper edge on the short-wavelength
+    side and a longer tail on the long-wavelength side - matching real LED
+    datasheets without needing a separate asymmetry parameter.
 
-    model="gaussian_wavenumber" (default, recommended): a Gaussian defined in
-    wavenumber (1/lambda) space, transformed back to wavelength. This is the
-    standard approximation for LED spectra (see e.g. Ohno, "Spectral design
-    considerations for white LED color rendering", Opt. Eng. 44(11), 2005):
-    because LED emission is fundamentally a function of photon energy, a
-    Gaussian that's symmetric in energy/wavenumber comes out asymmetric in
-    wavelength - a sharper edge on the short-wavelength side and a longer
-    tail on the long-wavelength side - matching real LED datasheets without
-    needing a separate asymmetry parameter.
-
-    model="two_sided_exp": a simpler two-sided exponential decay, symmetric
-    in wavelength about the center, dropping to half-max at +-fwhm_nm/2.
-    Provided as a lighter-weight alternative when you don't need the
-    physically-motivated asymmetry.
+    (An earlier version of this function also offered a simpler two-sided
+    exponential decay as a lighter-weight, symmetric alternative - removed
+    since the physically-motivated asymmetric model above is a strict
+    improvement with no real downside once implemented.)
     """
-    if model not in LED_MODELS:
-        raise ValueError(f"Unknown LED model {model!r}, expected one of {LED_MODELS}")
     if center_nm <= 0 or fwhm_nm <= 0:
         raise ValueError("center_nm and fwhm_nm must be positive")
 
-    if model == "gaussian_wavenumber":
-        value = _gaussian_wavenumber(grid, center_nm, fwhm_nm)
-    else:
-        value = _two_sided_exp(grid, center_nm, fwhm_nm)
+    value = _gaussian_wavenumber(grid, center_nm, fwhm_nm)
 
     return Spectrum(
         wavelength_nm=grid.copy(),
         value=value,
         label=f"LED {center_nm:.0f} nm (FWHM {fwhm_nm:.0f} nm)",
         kind="source",
-        source=f"modeled:{model}",
-        meta={"center_nm": center_nm, "fwhm_nm": fwhm_nm, "model": model},
+        source="modeled:gaussian_wavenumber",
+        meta={"center_nm": center_nm, "fwhm_nm": fwhm_nm},
     )
 
 
@@ -102,11 +91,3 @@ def _gaussian_wavenumber(grid: np.ndarray, center_nm: float, fwhm_nm: float) -> 
     fwhm_nu = fwhm_nm / (center_nm**2)
     sigma_nu = fwhm_nu * _FWHM_TO_SIGMA
     return np.exp(-0.5 * ((nu - nu0) / sigma_nu) ** 2)
-
-
-def _two_sided_exp(grid: np.ndarray, center_nm: float, fwhm_nm: float) -> np.ndarray:
-    # Symmetric two-sided exponential decay: value = exp(-|dλ| * k), solved
-    # so that value = 0.5 at |dλ| = fwhm_nm / 2.
-    half_width = fwhm_nm / 2.0
-    k = np.log(2.0) / half_width
-    return np.exp(-np.abs(grid - center_nm) * k)

@@ -4,15 +4,14 @@ import pytest
 from fluorescence_model.sources import laser_spectrum, led_spectrum
 
 
-@pytest.mark.parametrize("model", ["gaussian_wavenumber", "two_sided_exp"])
-def test_led_peaks_at_center(model):
-    spec = led_spectrum(center_nm=470, fwhm_nm=25, model=model)
+def test_led_peaks_at_center():
+    spec = led_spectrum(center_nm=470, fwhm_nm=25)
     assert spec.peak_nm() == pytest.approx(470, abs=1)
     assert spec.value.max() == pytest.approx(1.0, abs=1e-6)
 
 
 def test_led_gaussian_wavenumber_is_asymmetric_in_wavelength():
-    spec = led_spectrum(center_nm=470, fwhm_nm=40, model="gaussian_wavenumber")
+    spec = led_spectrum(center_nm=470, fwhm_nm=40)
     wl, val = spec.wavelength_nm, spec.value
     peak_idx = int(np.argmax(val))
     half = 0.5
@@ -25,24 +24,11 @@ def test_led_gaussian_wavenumber_is_asymmetric_in_wavelength():
     assert red_half_width > blue_half_width
 
 
-def test_two_sided_exp_is_symmetric():
-    spec = led_spectrum(center_nm=470, fwhm_nm=40, model="two_sided_exp")
-    resampled = spec.resample(np.arange(400, 541, 1.0))
-    left = spec.resample(np.array([470 - 20]))[0]
-    right = spec.resample(np.array([470 + 20]))[0]
-    assert left == pytest.approx(right, abs=1e-9)
-
-
 def test_led_rejects_nonpositive_params():
     with pytest.raises(ValueError):
         led_spectrum(center_nm=0, fwhm_nm=10)
     with pytest.raises(ValueError):
         led_spectrum(center_nm=470, fwhm_nm=-1)
-
-
-def test_led_rejects_unknown_model():
-    with pytest.raises(ValueError):
-        led_spectrum(center_nm=470, fwhm_nm=10, model="not_a_model")
 
 
 def test_laser_is_narrow():
