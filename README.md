@@ -151,3 +151,9 @@ tests/                           pytest suite (parsers, optics math, source mode
 ```bash
 pytest
 ```
+
+## License
+
+The code is [MIT-licensed](LICENSE). The fluorophore and filter spectral data it bundles/fetches
+comes from third-party sources with their own terms - see [`NOTICE.md`](NOTICE.md) before
+redistributing `data/` or anything fetched at runtime.
