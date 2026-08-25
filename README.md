@@ -29,7 +29,14 @@ git clone <this repo's URL>
 cd fluorescence-model
 
 python -m venv .venv
-.venv\Scripts\Activate.ps1        # Windows PowerShell
+
+# Windows PowerShell - if Activate.ps1 fails with "running scripts is
+# disabled on this system", PowerShell's default execution policy blocks
+# *any* unsigned local script, venv activation included. This unblocks it
+# for just this one PowerShell process (no admin rights needed, and it
+# doesn't change the policy for anything else):
+#   Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
+.venv\Scripts\Activate.ps1
 # .venv\Scripts\activate.bat      # Windows cmd.exe, instead
 # source .venv/bin/activate       # macOS/Linux, instead
 

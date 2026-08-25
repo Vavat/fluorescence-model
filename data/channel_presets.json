@@ -1,0 +1,35 @@
+{
+  "Ch2": {
+    "fluorophore_name": "EGFP",
+    "excitation_filter": "Thorlabs MDF05-GFP - Excitation Filter (12.5 mm Fluorescence Filter Set for GFP)",
+    "dichroic": "Thorlabs MDF05-GFP - Dichroic (12.5 mm Fluorescence Filter Set for GFP)",
+    "emission_filter": "Thorlabs MDF05-GFP - Emission Filter (12.5 mm Fluorescence Filter Set for GFP)",
+    "source_type": "LED",
+    "led_center_nm": 465.0,
+    "led_fwhm_nm": 25.0,
+    "laser_center_nm": 488.0,
+    "laser_linewidth_nm": 1.0
+  },
+  "Ch1": {
+    "fluorophore_name": "DAPI",
+    "excitation_filter": "Thorlabs MDF05-BFP - Excitation Filter (12.5 mm Fluorescence Filter Set for BFP)",
+    "dichroic": "Thorlabs MDF05-BFP - Dichroic (12.5 mm Fluorescence Filter Set for BFP)",
+    "emission_filter": "Thorlabs MDF05-BFP - Emission Filter (12.5 mm Fluorescence Filter Set for BFP)",
+    "source_type": "LED",
+    "led_center_nm": 395.0,
+    "led_fwhm_nm": 25.0,
+    "laser_center_nm": 488.0,
+    "laser_linewidth_nm": 1.0
+  },
+  "Ch3": {
+    "fluorophore_name": "mCherry",
+    "excitation_filter": "Thorlabs MDF05-MCHC - Excitation Filter (12.5 mm Fluorescence Filter Set for MCHC)",
+    "dichroic": "Thorlabs MDF05-MCHC - Dichroic (12.5 mm Fluorescence Filter Set for MCHC)",
+    "emission_filter": "Thorlabs MDF05-MCHC - Emission Filter (12.5 mm Fluorescence Filter Set for MCHC)",
+    "source_type": "LED",
+    "led_center_nm": 558.0,
+    "led_fwhm_nm": 25.0,
+    "laser_center_nm": 488.0,
+    "laser_linewidth_nm": 1.0
+  }
+}

@@ -13,7 +13,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent / "src"))
 
 import streamlit as st
 
-from fluorescence_model import catalog, export, fpbase_client, optics, plotting, sources, tugraz_client
+from fluorescence_model import catalog, channel_presets, export, fpbase_client, optics, plotting, sources, tugraz_client
 from fluorescence_model.filter_import import parse_filter_file
 
 st.set_page_config(page_title="Fluorescence Filter/Source Modeler", layout="wide")
@@ -23,6 +23,60 @@ st.caption(
     "dichroics, and LED/laser sources for a given fluorophore."
 )
 
+st.session_state.setdefault("active_channel", channel_presets.CHANNEL_NAMES[0])
+
+
+def _activate_channel(name: str) -> None:
+    """Load a saved channel preset into the sidebar widgets. Runs as a
+    button's on_click callback, which fires *before* the script reruns, so
+    setting these session_state keys here is what the widgets below pick up
+    on the rerun that follows. Only re-applies a saved value that's still a
+    valid option today (e.g. a filter deleted since the preset was saved is
+    silently skipped rather than crashing the widget)."""
+    st.session_state["active_channel"] = name
+    preset = channel_presets.get_preset(name)
+    if preset is None:
+        return
+
+    fluor_names = [f.name for f in catalog.list_fluorophores()]
+    if preset.fluorophore_name in fluor_names:
+        st.session_state["sel_fluor"] = preset.fluorophore_name
+
+    def _apply_filter(key, category, value):
+        names = ["None"] + [f.display_name for f in catalog.list_filters(category)]
+        if value in names:
+            st.session_state[key] = value
+
+    _apply_filter("sel_ex_filter", "excitation", preset.excitation_filter)
+    _apply_filter("sel_dichroic", "dichroic", preset.dichroic)
+    _apply_filter("sel_em_filter", "emission", preset.emission_filter)
+
+    if preset.source_type in ("LED", "Laser"):
+        st.session_state["sel_source_type"] = preset.source_type
+    st.session_state["sel_led_center"] = preset.led_center_nm
+    st.session_state["sel_led_fwhm"] = preset.led_fwhm_nm
+    st.session_state["sel_laser_center"] = preset.laser_center_nm
+    st.session_state["sel_laser_linewidth"] = preset.laser_linewidth_nm
+
+
+def _save_channel(name: str) -> None:
+    """Snapshot the sidebar's current widget state into a channel preset and
+    persist it to disk."""
+    preset = channel_presets.ChannelPreset(
+        fluorophore_name=st.session_state.get("sel_fluor"),
+        excitation_filter=st.session_state.get("sel_ex_filter", "None"),
+        dichroic=st.session_state.get("sel_dichroic", "None"),
+        emission_filter=st.session_state.get("sel_em_filter", "None"),
+        source_type=st.session_state.get("sel_source_type", "LED"),
+        led_center_nm=st.session_state.get("sel_led_center", 465.0),
+        led_fwhm_nm=st.session_state.get("sel_led_fwhm", 25.0),
+        laser_center_nm=st.session_state.get("sel_laser_center", 488.0),
+        laser_linewidth_nm=st.session_state.get("sel_laser_linewidth", 1.0),
+    )
+    channel_presets.save_preset(name, preset)
+    st.session_state["active_channel"] = name
+    st.session_state["_channel_save_msg"] = f"Saved current settings to {name}."
+
 # ---------------------------------------------------------------- sidebar --
 
 with st.sidebar:
@@ -30,7 +84,7 @@ with st.sidebar:
     fluorophores = catalog.list_fluorophores()
     fluor_names = [f.name for f in fluorophores]
     default_fluor_index = fluor_names.index("EGFP") if "EGFP" in fluor_names else (0 if fluor_names else None)
-    selected_name = st.selectbox("Fluorophore", fluor_names, index=default_fluor_index)
+    selected_name = st.selectbox("Fluorophore", fluor_names, index=default_fluor_index, key="sel_fluor")
     selected_fluor = next((f for f in fluorophores if f.name == selected_name), None)
 
     with st.expander("Add a fluorophore"):
@@ -70,22 +124,22 @@ with st.sidebar:
     dichroics = catalog.list_filters("dichroic")
     em_filters = catalog.list_filters("emission")
 
-    def _filter_picker(label, options, default_part_number=None):
+    def _filter_picker(label, options, key, default_part_number=None):
         names = ["None"] + [f.display_name for f in options]
         default_index = 0
         if default_part_number is not None:
             default_entry = next((f for f in options if f.part_number == default_part_number), None)
             if default_entry is not None:
                 default_index = names.index(default_entry.display_name)
-        choice = st.selectbox(label, names, index=default_index)
+        choice = st.selectbox(label, names, index=default_index, key=key)
         return next((f for f in options if f.display_name == choice), None)
 
     # Thorlabs' MDF05-GFP set (excitation/dichroic/emission) as the default
     # out-of-the-box filter combination, paired with EGFP and the 465nm LED
     # default below.
-    selected_ex_filter = _filter_picker("Excitation filter", ex_filters, default_part_number="MDF05-GFP")
-    selected_dichroic = _filter_picker("Dichroic", dichroics, default_part_number="MDF05-GFP")
-    selected_em_filter = _filter_picker("Emission filter", em_filters, default_part_number="MDF05-GFP")
+    selected_ex_filter = _filter_picker("Excitation filter", ex_filters, "sel_ex_filter", default_part_number="MDF05-GFP")
+    selected_dichroic = _filter_picker("Dichroic", dichroics, "sel_dichroic", default_part_number="MDF05-GFP")
+    selected_em_filter = _filter_picker("Emission filter", em_filters, "sel_em_filter", default_part_number="MDF05-GFP")
 
     with st.expander("Import a filter data file"):
         st.markdown(
@@ -143,14 +197,22 @@ with st.sidebar:
                     st.error(str(e))
 
     st.header("Excitation source")
-    source_type = st.radio("Type", ["LED", "Laser"], horizontal=True)
+    source_type = st.radio("Type", ["LED", "Laser"], horizontal=True, key="sel_source_type")
     if source_type == "LED":
-        center_nm = st.number_input("Center wavelength (nm)", min_value=200.0, max_value=1200.0, value=465.0, step=1.0)
-        fwhm_nm = st.number_input("FWHM (nm)", min_value=1.0, max_value=200.0, value=25.0, step=1.0)
+        center_nm = st.number_input(
+            "Center wavelength (nm)", min_value=200.0, max_value=1200.0, value=465.0, step=1.0, key="sel_led_center"
+        )
+        fwhm_nm = st.number_input(
+            "FWHM (nm)", min_value=1.0, max_value=200.0, value=25.0, step=1.0, key="sel_led_fwhm"
+        )
         source_spectrum = sources.led_spectrum(center_nm, fwhm_nm)
     else:
-        center_nm = st.number_input("Center wavelength (nm)", min_value=200.0, max_value=1200.0, value=488.0, step=0.5)
-        linewidth_nm = st.number_input("Linewidth (nm)", min_value=0.01, max_value=20.0, value=1.0, step=0.1)
+        center_nm = st.number_input(
+            "Center wavelength (nm)", min_value=200.0, max_value=1200.0, value=488.0, step=0.5, key="sel_laser_center"
+        )
+        linewidth_nm = st.number_input(
+            "Linewidth (nm)", min_value=0.01, max_value=20.0, value=1.0, step=0.1, key="sel_laser_linewidth"
+        )
         source_spectrum = sources.laser_spectrum(center_nm, linewidth_nm)
 
     with st.expander("Curve visibility"):
@@ -209,9 +271,32 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-col_scale, col_side = st.columns([1, 2])
+col_scale, col_channels, col_side = st.columns([1, 2, 2])
 with col_scale:
     log_y = st.radio("Y-axis scale", ["Linear", "Log"], horizontal=True, label_visibility="collapsed") == "Log"
+with col_channels:
+    ch_cols = st.columns(2 * len(channel_presets.CHANNEL_NAMES))
+    for i, ch in enumerate(channel_presets.CHANNEL_NAMES):
+        with ch_cols[2 * i]:
+            st.button(
+                ch,
+                key=f"activate_{ch}",
+                type="primary" if st.session_state["active_channel"] == ch else "secondary",
+                on_click=_activate_channel,
+                args=(ch,),
+                width="stretch",
+                help=f"Load the settings saved for {ch}",
+            )
+        with ch_cols[2 * i + 1]:
+            st.button(
+                "\U0001F4BE",  # floppy disk
+                key=f"save_{ch}",
+                on_click=_save_channel,
+                args=(ch,),
+                help=f"Save the current fluorophore/filters/source as {ch}",
+            )
+    if msg := st.session_state.pop("_channel_save_msg", None):
+        st.toast(msg, icon="\U0001F4BE")
 with col_side:
     side = st.radio(
         "Show",
