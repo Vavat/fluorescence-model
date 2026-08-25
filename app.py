@@ -275,6 +275,12 @@ col_scale, col_channels, col_side = st.columns([1, 2, 2])
 with col_scale:
     log_y = st.radio("Y-axis scale", ["Linear", "Log"], horizontal=True, label_visibility="collapsed") == "Log"
 with col_channels:
+    # No `help=` tooltips on these - they toggle `type` (primary/secondary)
+    # on every rerun of the whole app, not just their own clicks, and
+    # Streamlit's hover-tooltip component doesn't reliably track a widget
+    # that re-renders out from under the mouse: it can end up stuck open or
+    # reappear over the wrong button. Self-explanatory labels sidestep the
+    # bug rather than working around it.
     ch_cols = st.columns(2 * len(channel_presets.CHANNEL_NAMES))
     for i, ch in enumerate(channel_presets.CHANNEL_NAMES):
         with ch_cols[2 * i]:
@@ -285,15 +291,13 @@ with col_channels:
                 on_click=_activate_channel,
                 args=(ch,),
                 width="stretch",
-                help=f"Load the settings saved for {ch}",
             )
         with ch_cols[2 * i + 1]:
             st.button(
-                "\U0001F4BE",  # floppy disk
+                "\U0001F4BE Save",  # floppy disk
                 key=f"save_{ch}",
                 on_click=_save_channel,
                 args=(ch,),
-                help=f"Save the current fluorophore/filters/source as {ch}",
             )
     if msg := st.session_state.pop("_channel_save_msg", None):
         st.toast(msg, icon="\U0001F4BE")
