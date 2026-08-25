@@ -1,0 +1,15 @@
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+*.egg-info/
+streamlit_test.log
+
+# tugraz listing is a refreshable cache of their public index page, not
+# curated data - regenerate with tugraz_client._fetch_listing(force_refresh=True)
+data/tugraz_listing_cache.json
+
+# raw manufacturer downloads staged for import - data/filters/ holds the
+# cleaned, registered versions the app actually uses; these are just the
+# local working copies they were parsed from
+optics/

@@ -1,93 +1,159 @@
-# fluorescence model
+# Fluorescence Filter & Source Modeler
 
+A local tool for picking excitation filters, dichroics, emission filters, and LED/laser sources for
+a given fluorophore, by modeling spectral overlap through the optical path.
 
+## What it does
 
-## Getting started
+- Pulls fluorophore excitation/emission spectra from [FPbase](https://www.fpbase.org) (fluorescent
+  proteins + common dyes) and, on request, from
+  [fluorophores.tugraz.at](https://fluorophores.tugraz.at) (organic dyes) - one dye at a time, never
+  a bulk crawl (see [Data sources](#data-sources) below).
+- Pulls filter/dichroic transmission curves from FPbase's aggregated filter catalog (real Chroma/
+  Omega/Thorlabs parts, no download needed) where available, and otherwise imports them from data
+  files you download from a manufacturer's product page - see
+  [`data/filters/README.md`](data/filters/README.md).
+- Models an LED or laser source from just a center wavelength and FWHM/linewidth.
+- Plots everything overlaid, and computes relative excitation/emission efficiency scores plus
+  bleed-through warnings for the combination you've picked.
 
-To make it easy for you to get started with GitLab, here's a list of recommended next steps.
+## Deployment
 
-Already a pro? Just edit this README.md and make it your own. Want to make it easy? [Use the template at the bottom](#editing-this-readme)!
+This is a local Streamlit app - "deploying" it means running it on your own machine (or any machine
+you can `pip install` on); there's no server component to stand up separately.
 
-## Add your files
+**Prerequisites**: Python 3.10+.
 
-* [Create](https://docs.gitlab.com/user/project/repository/web_editor/#create-a-file) or [upload](https://docs.gitlab.com/user/project/repository/web_editor/#upload-a-file) files
-* [Add files using the command line](https://docs.gitlab.com/topics/git/add_files/#add-files-to-a-git-repository) or push an existing Git repository with the following command:
+```powershell
+git clone <this repo's URL>
+cd fluorescence-model
+
+python -m venv .venv
+.venv\Scripts\Activate.ps1        # Windows PowerShell
+# .venv\Scripts\activate.bat      # Windows cmd.exe, instead
+# source .venv/bin/activate       # macOS/Linux, instead
+
+pip install -r requirements.txt
+pip install -e .                  # installs this repo's own package (src/fluorescence_model) in editable mode
+
+pytest                            # optional - confirms the install works (should be all green)
+
+streamlit run app.py
+```
+
+Streamlit prints a local URL (typically `http://localhost:8501`) and opens it in your browser
+automatically. Leave the terminal running - closing it stops the app. To stop it yourself, press
+`Ctrl+C` in that terminal.
+
+**If you edit the code**: Streamlit auto-reloads on save, but only for `app.py` itself - editing any
+other file (`plotting.py`, `optics.py`, etc.) requires a full restart (`Ctrl+C`, then `streamlit run
+app.py` again) to take effect, since Python keeps already-imported modules cached in memory for the
+life of the process.
+
+A handful of common fluorophores (EGFP, mCherry, DAPI, Alexa Fluor 488/568/647, Cy3, Cy5) are bundled
+in `data/fluorophores/` so the app is useful immediately; add more from the sidebar. Filters start
+empty - add the ones you're actually considering via the sidebar's filter tools (see below).
+
+## Using the app
+
+### Sidebar
+
+- **Fluorophore**: pick from what's already downloaded. **Add a fluorophore** fetches a new one -
+  either by name from FPbase, or (one dye at a time, on request) from fluorophores.tugraz.at.
+- **Filters** - three dropdowns (Excitation filter, Dichroic, Emission filter), each defaulting to
+  "None" (pass-through). Populate them via:
+  - **Import a filter data file**: upload a raw data file you've downloaded from a manufacturer's
+    product page (xlsx/csv/txt) - the importer auto-detects the table inside it. See
+    [`data/filters/README.md`](data/filters/README.md) for where to find these on Thorlabs/Edmund/
+    Semrock/Chroma sites.
+  - **Fetch a filter from FPbase**: look up a real commercial filter by (fuzzy) name/part number, no
+    file needed, for whatever FPbase's aggregated catalog happens to have.
+- **Excitation source**: choose **LED** or **Laser**, then set its center wavelength and
+  FWHM/linewidth. LEDs are modeled as a Gaussian in wavenumber space, which naturally comes out
+  asymmetric in wavelength - matching the shape real LED datasheets actually have.
+- **Curve visibility**: a multiselect of every curve the plot can draw - uncheck one to persistently
+  hide it. This is the reliable way to hide a curve; clicking its entry directly in the plot's legend
+  only hides it until the next change (Streamlit doesn't preserve that click across a rerun).
+
+### Main panel
+
+- **Linear/Log radio** (unlabeled, top left above the plot): switches the y-axis scale. Log reveals
+  how deep a filter's out-of-band blocking actually goes (real filters commonly block down to 1e-4 to
+  1e-6, invisible on a linear axis).
+- **Show** (unlabeled, top right above the plot): a four-way switch limiting which curves are
+  plotted, without changing your Curve visibility choices:
+  - **Excitation only** / **Emission only** - just that side of the optical path (the dichroic stays
+    shown in both, since it's relevant to each).
+  - **All** - everything (default).
+  - **Excitation leak** - just the curves behind the excitation-bleed warning (see below): the
+    source, excitation filter, dichroic, emission filter, and the fluorophore's own emission (for
+    context), plus the leak spectrum itself - so you can see at a glance how much stray excitation
+    light would land in the same wavelengths as genuine emission.
+- **The plot**: dashed lines are the illumination side (source, excitation filter, fluorophore
+  excitation), solid lines are the detection side (fluorophore emission, emission filter). Each line
+  is colored by its own characteristic wavelength - peak for most curves, the 50%-transmission
+  crossing for the dichroic (a broad near-100% plateau, not a single peak, so peak_nm() wouldn't land
+  on its physically meaningful cut-on/off edge). The filled curves show light that actually reaches
+  the specimen/camera, as a true-color gradient across wavelength, deliberately not normalized so
+  their height reflects real throughput loss: *Excitation light at specimen* (faint) and *Excitation
+  light absorbed by fluorophore* (solid, drawn on top), *Emission light at camera*, and *Excitation
+  leak at camera* (dashed, since it's excitation-origin light even though it ends up at the camera -
+  overlay it against "Emission light at camera" to see whether a leak would land in the same
+  wavelengths as your real signal).
+- **Export**: pick a format (CSV, Excel, or JSON) and download the currently-plotted curves as one
+  wavelength-indexed table - values match what's on screen (reference curves peak-normalized, the
+  "light that actually gets there" curves at real relative magnitude).
+- **Warnings**: appear automatically when excitation light is likely to bleed through to the
+  detector (i.e. falls inside both the excitation and emission filter passbands), or when
+  excitation/emission efficiency is close to zero for the chosen combination.
+
+## Data sources
+
+- **FPbase** (`src/fluorescence_model/fpbase_client.py`): uses the [`fpbase`](https://pypi.org/project/fpbase/)
+  Python client (GraphQL under the hood). Fetches and caches locally as JSON.
+- **fluorophores.tugraz.at** (`src/fluorescence_model/tugraz_client.py`): their own disclaimer asks
+  that people not bulk-download the whole database, so this client only ever fetches one named
+  fluorophore at a time, on explicit request from the UI - it never crawls their listing for bulk
+  import. Their substance detail pages have been returning HTTP 500 site-wide since at least
+  2026-08-20 (a bug on their end); the fetcher surfaces that clearly and lets you supply a spectrum
+  CSV id manually as a fallback if you have one.
+- **Filters/dichroics**: no manufacturer offers a bulk API, but FPbase also aggregates real
+  commercial filter spectra (contributed via public microscope configs) - `fpbase_client.fetch_filter()`
+  looks one up by (fuzzy) name and registers it directly, no file needed, for whatever FPbase happens
+  to have (coverage is manufacturer-dependent: strong for Chroma/Omega, weak for Thorlabs, essentially
+  none for Edmund Optics). Anything FPbase doesn't have is downloaded one product page at a time by
+  you and imported via the app - see `data/filters/README.md`.
+- **Camera Bayer-mask QE curves**: not yet modeled - there's no standard bulk source for these either;
+  a later addition once real sensor datasheet curves are available to plug in.
+
+## Project layout
 
 ```
-cd existing_repo
-git remote add origin https://gitlab.com/cca-bio/microscope/fluorescence-model.git
-git branch -M main
-git push -uf origin main
+app.py                          Streamlit UI
+src/fluorescence_model/
+  spectrum.py                   Spectrum type + resampling/integration/peak/crossing helpers
+  fpbase_client.py               FPbase fetch + cache (fluorophores and filters)
+  tugraz_client.py               fluorophores.tugraz.at single-lookup fetch + cache
+  filter_import.py               manufacturer file sniffing/parsing
+  sources.py                     LED/laser spectral models
+  optics.py                      overlap-integral efficiency/bleed-through/leak math
+  catalog.py                     pick-list assembly for the UI
+  plotting.py                    Plotly figure builder (coloring scheme, gradients, show/hide)
+  wavelength_color.py             wavelength -> perceived RGB color approximation
+  export.py                       CSV/Excel/JSON export of the currently-plotted curves
+data/fluorophores/               cached fluorophore spectra (JSON)
+data/filters/                    filter data files + catalog.yaml
+tests/                           pytest suite (parsers, optics math, source models, plotting, color)
 ```
 
-## Integrate with your tools
+## Testing
 
-* [Set up project integrations](https://gitlab.com/cca-bio/microscope/fluorescence-model/-/settings/integrations)
-
-## Collaborate with your team
-
-* [Invite team members and collaborators](https://docs.gitlab.com/user/project/members/)
-* [Create a new merge request](https://docs.gitlab.com/user/project/merge_requests/creating_merge_requests/)
-* [Automatically close issues from merge requests](https://docs.gitlab.com/user/project/issues/managing_issues/#closing-issues-automatically)
-* [Enable merge request approvals](https://docs.gitlab.com/user/project/merge_requests/approvals/)
-* [Set auto-merge](https://docs.gitlab.com/user/project/merge_requests/auto_merge/)
-
-## Test and Deploy
-
-Use the built-in continuous integration in GitLab.
-
-* [Get started with GitLab CI/CD](https://docs.gitlab.com/ci/quick_start/)
-* [Analyze your code for known vulnerabilities with Static Application Security Testing (SAST)](https://docs.gitlab.com/user/application_security/sast/)
-* [Deploy to Kubernetes, Amazon EC2, or Amazon ECS using Auto Deploy](https://docs.gitlab.com/topics/autodevops/requirements/)
-* [Use pull-based deployments for improved Kubernetes management](https://docs.gitlab.com/user/clusters/agent/)
-* [Set up protected environments](https://docs.gitlab.com/ci/environments/protected_environments/)
-
-***
-
-# Editing this README
-
-When you're ready to make this README your own, just edit this file and use the handy template below (or feel free to structure it however you want - this is just a starting point!). Thanks to [makeareadme.com](https://www.makeareadme.com/) for this template.
-
-## Suggestions for a good README
-
-Every project is different, so consider which of these sections apply to yours. The sections used in the template are suggestions for most open source projects. Also keep in mind that while a README can be too long and detailed, too long is better than too short. If you think your README is too long, consider utilizing another form of documentation rather than cutting out information.
-
-## Name
-Choose a self-explaining name for your project.
-
-## Description
-Let people know what your project can do specifically. Provide context and add a link to any reference visitors might be unfamiliar with. A list of Features or a Background subsection can also be added here. If there are alternatives to your project, this is a good place to list differentiating factors.
-
-## Badges
-On some READMEs, you may see small images that convey metadata, such as whether or not all the tests are passing for the project. You can use Shields to add some to your README. Many services also have instructions for adding a badge.
-
-## Visuals
-Depending on what you are making, it can be a good idea to include screenshots or even a video (you'll frequently see GIFs rather than actual videos). Tools like ttygif can help, but check out Asciinema for a more sophisticated method.
-
-## Installation
-Within a particular ecosystem, there may be a common way of installing things, such as using Yarn, NuGet, or Homebrew. However, consider the possibility that whoever is reading your README is a novice and would like more guidance. Listing specific steps helps remove ambiguity and gets people to using your project as quickly as possible. If it only runs in a specific context like a particular programming language version or operating system or has dependencies that have to be installed manually, also add a Requirements subsection.
-
-## Usage
-Use examples liberally, and show the expected output if you can. It's helpful to have inline the smallest example of usage that you can demonstrate, while providing links to more sophisticated examples if they are too long to reasonably include in the README.
-
-## Support
-Tell people where they can go to for help. It can be any combination of an issue tracker, a chat room, an email address, etc.
-
-## Roadmap
-If you have ideas for releases in the future, it is a good idea to list them in the README.
-
-## Contributing
-State if you are open to contributions and what your requirements are for accepting them.
-
-For people who want to make changes to your project, it's helpful to have some documentation on how to get started. Perhaps there is a script that they should run or some environment variables that they need to set. Make these steps explicit. These instructions could also be useful to your future self.
-
-You can also document commands to lint the code or run tests. These steps help to ensure high code quality and reduce the likelihood that the changes inadvertently break something. Having instructions for running tests is especially helpful if it requires external setup, such as starting a Selenium server for testing in a browser.
-
-## Authors and acknowledgment
-Show your appreciation to those who have contributed to the project.
+```bash
+pytest
+```
 
 ## License
-For open source projects, say how it is licensed.
 
-## Project status
-If you have run out of energy or time for your project, put a note at the top of the README saying that development has slowed down or stopped completely. Someone may choose to fork your project or volunteer to step in as a maintainer or owner, allowing your project to keep going. You can also make an explicit request for maintainers.
+The code is [MIT-licensed](LICENSE). The fluorophore and filter spectral data it bundles/fetches
+comes from third-party sources with their own terms - see [`NOTICE.md`](NOTICE.md) before
+redistributing `data/` or anything fetched at runtime.
