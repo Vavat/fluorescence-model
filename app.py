@@ -26,14 +26,16 @@ st.caption(
 st.session_state.setdefault("active_channel", channel_presets.CHANNEL_NAMES[0])
 
 
-def _activate_channel(name: str) -> None:
-    """Load a saved channel preset into the sidebar widgets. Runs as a
-    button's on_click callback, which fires *before* the script reruns, so
-    setting these session_state keys here is what the widgets below pick up
-    on the rerun that follows. Only re-applies a saved value that's still a
-    valid option today (e.g. a filter deleted since the preset was saved is
-    silently skipped rather than crashing the widget)."""
-    st.session_state["active_channel"] = name
+def _activate_channel() -> None:
+    """Load a saved channel preset into the sidebar widgets. Runs as the
+    channel radio's on_change callback, which fires *after* Streamlit has
+    already updated st.session_state["active_channel"] to the newly clicked
+    channel but *before* the script reruns, so setting these session_state
+    keys here is what the widgets below pick up on the rerun that follows.
+    Only re-applies a saved value that's still a valid option today (e.g. a
+    filter deleted since the preset was saved is silently skipped rather
+    than crashing the widget)."""
+    name = st.session_state["active_channel"]
     preset = channel_presets.get_preset(name)
     if preset is None:
         return
@@ -74,7 +76,6 @@ def _save_channel(name: str) -> None:
         laser_linewidth_nm=st.session_state.get("sel_laser_linewidth", 1.0),
     )
     channel_presets.save_preset(name, preset)
-    st.session_state["active_channel"] = name
     st.session_state["_channel_save_msg"] = f"Saved current settings to {name}."
 
 # ---------------------------------------------------------------- sidebar --
@@ -275,30 +276,34 @@ col_scale, col_channels, col_side = st.columns([1, 2, 2])
 with col_scale:
     log_y = st.radio("Y-axis scale", ["Linear", "Log"], horizontal=True, label_visibility="collapsed") == "Log"
 with col_channels:
-    # No `help=` tooltips on these - they toggle `type` (primary/secondary)
-    # on every rerun of the whole app, not just their own clicks, and
-    # Streamlit's hover-tooltip component doesn't reliably track a widget
-    # that re-renders out from under the mouse: it can end up stuck open or
-    # reappear over the wrong button. Self-explanatory labels sidestep the
-    # bug rather than working around it.
-    ch_cols = st.columns(2 * len(channel_presets.CHANNEL_NAMES))
-    for i, ch in enumerate(channel_presets.CHANNEL_NAMES):
-        with ch_cols[2 * i]:
-            st.button(
-                ch,
-                key=f"activate_{ch}",
-                type="primary" if st.session_state["active_channel"] == ch else "secondary",
-                on_click=_activate_channel,
-                args=(ch,),
-                width="stretch",
-            )
-        with ch_cols[2 * i + 1]:
-            st.button(
-                "\U0001F4BE Save",  # floppy disk
-                key=f"save_{ch}",
-                on_click=_save_channel,
-                args=(ch,),
-            )
+    ch_radio_col, ch_save_col = st.columns([3, 1])
+    with ch_radio_col:
+        # Same style as the Y-axis scale switch: a plain horizontal st.radio
+        # with its label collapsed. Selecting a channel loads its saved
+        # preset into the sidebar (see _activate_channel); there's one
+        # shared Save button rather than one per option since a radio group
+        # can't embed extra buttons per choice.
+        active_channel = st.radio(
+            "Channel",
+            channel_presets.CHANNEL_NAMES,
+            horizontal=True,
+            label_visibility="collapsed",
+            key="active_channel",
+            on_change=_activate_channel,
+        )
+    with ch_save_col:
+        # Deliberately not width="stretch" - a short, content-sized button
+        # sitting right next to the radio reads as "save the channel I just
+        # picked"; a full-width one looked oversized and disconnected from
+        # it. The channel name goes in the visible label, not a `help=`
+        # tooltip, since a tooltip whose text changes across reruns is what
+        # caused the earlier stuck/misplaced-tooltip bug.
+        st.button(
+            f"\U0001F4BE Save {active_channel}",
+            key="save_active_channel",
+            on_click=_save_channel,
+            args=(active_channel,),
+        )
     if msg := st.session_state.pop("_channel_save_msg", None):
         st.toast(msg, icon="\U0001F4BE")
 with col_side:
@@ -372,15 +377,17 @@ with col_export_format:
 with col_export_button:
     export_data, export_mime, export_ext = export.export_bytes(export_table, export_format)
     st.download_button(
-        f"Export spectra as {export_format}",
+        f"Export spectra as {export_format} ({active_channel})",
         data=export_data,
-        file_name=f"fluorescence_spectra.{export_ext}",
+        file_name=f"fluorescence_spectra_{active_channel}.{export_ext}",
         mime=export_mime,
     )
 st.caption(
-    "One row per wavelength (300-900nm), one column per curve currently plotted - values match what's "
-    "on screen: reference curves peak-normalized, the four \"light that actually gets there\" curves "
-    "at their real relative magnitude."
+    "One row per wavelength (300-900nm), one column per curve currently plotted for the active channel "
+    f"({active_channel}) - values match what's on screen: reference curves peak-normalized, the four "
+    "\"light that actually gets there\" curves at their real relative magnitude. Switch channels above "
+    "the plot to export a different one; unsaved sidebar edits export too, whether or not you've hit "
+    "\U0001F4BE Save."
 )
 
 result = optics.evaluate_path(
